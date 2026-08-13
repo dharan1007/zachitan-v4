@@ -1,0 +1,3 @@
+'use client';
+import {useEffect,useState} from 'react';
+export default function Sources(){const [sources,setSources]=useState([]);useEffect(()=>{fetch('/api/data?action=sources').then(r=>r.json()).then(d=>setSources(d.sources||[])).catch(()=>{})},[]);const state=s=>s.startsWith('connected')?'CONNECTED':s.startsWith('best')?'DEGRADED':'GATED';return <div className="sourceLedger">{sources.map((x,i)=><div className="sourceLedgerRow" key={`${x.name}:${i}`}><b>{x.name}</b><span>{x.classes}</span><span className={`sourcePill ${state(x.state)}`} style={{width:'fit-content'}}>{x.state}</span><span>{x.quality}</span><p><b style={{fontSize:11}}>Role:</b> {x.role}<br/><b style={{fontSize:11}}>Rights:</b> {x.rights}</p></div>)}</div>}

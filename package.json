@@ -1,0 +1,8 @@
+{
+  "name":"zachitan",
+  "version":"4.0.0-beta.2",
+  "private":true,
+  "scripts":{"dev":"next dev","build":"next build","start":"next start","test":"node --test tests/*.test.mjs"},
+  "dependencies":{"next":"16.2.11","react":"19.2.0","react-dom":"19.2.0"},
+  "engines":{"node":"24.x"}
+}

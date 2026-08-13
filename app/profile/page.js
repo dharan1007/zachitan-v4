@@ -1,0 +1,2 @@
+import Profile from '@/app/components/Profile';import Footer from '@/app/components/Footer';
+export default function Page(){return <div className="page"><div className="sectionHead"><div><p className="eyebrow">Profile</p><h2>Local research preferences</h2></div><p>The v4 beta keeps personalization browser-local rather than collecting account data before the product’s privacy and identity architecture is mature.</p></div><Profile/><Footer/></div>}

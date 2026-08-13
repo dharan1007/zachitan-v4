@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {quantile,weightedQuantile,forecast,validate,indicators,microstructure} from '../lib/forecast.mjs';
+function series(n=900){const out=[];let p=100;for(let i=0;i<n;i++){const drift=.0003+Math.sin(i/31)*.0012;const shock=Math.sin(i*1.7)*.002+Math.cos(i/7)*.001;p*=Math.exp(drift+shock);const o=p*(1-Math.sin(i)*.0008),c=p,h=Math.max(o,c)*(1.003+Math.abs(Math.sin(i))*0.001),l=Math.min(o,c)*(0.997-Math.abs(Math.cos(i))*0.001);out.push({time:1700000000+i*300,open:o,high:h,low:l,close:c,volume:1000+200*Math.sin(i/5)+i%17});}return out;}
+test('quantile interpolates',()=>assert.equal(quantile([1,2,3,4],.5),2.5));
+test('weighted quantile honors weight',()=>assert.equal(weightedQuantile([1,10],[.9,.1],.5),1));
+test('forecast emits five or fewer ordered checkpoints',()=>{const f=forecast(series(),20);assert.equal(f.available,true);assert.ok(f.points.length>=4&&f.points.length<=5);for(let i=1;i<f.points.length;i++)assert.ok(f.points[i].bar>f.points[i-1].bar);});
+test('forecast has real evidence and probability bounds',()=>{const f=forecast(series(),12);assert.ok(f.effectiveN>0);assert.ok(f.evidenceScore>=0&&f.evidenceScore<=100);assert.ok(f.direction.up>=0&&f.direction.up<=1);assert.ok(f.direction.down>=0&&f.direction.down<=1);});
+test('forecast ranges are ordered',()=>{const f=forecast(series(),12);for(const k of[50,80,90]){assert.ok(f.ranges[k][0]<=f.center||f.ranges[k][0]<=f.ranges[k][1]);assert.ok(f.ranges[k][0]<=f.ranges[k][1]);}});
+test('validation is chronological and returns checks',()=>{const v=validate(series(1200),10,24);assert.equal(v.available,true);assert.ok(v.checks>=18);assert.ok(v.directionAccuracy>=0&&v.directionAccuracy<=1);});
+test('indicators finite',()=>{const x=indicators(series());assert.ok(Number.isFinite(x.rsi14));assert.ok(Number.isFinite(x.atrPct));});
+test('microstructure computes imbalance',()=>{const m=microstructure({bids:[{price:99,size:2}],asks:[{price:101,size:1}]},[{price:100,size:1,makerSide:'sell'}]);assert.ok(m.bookImbalance>0);assert.ok(m.tradeImbalance>0);assert.equal(m.spreadBps,200);});

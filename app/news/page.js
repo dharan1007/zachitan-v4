@@ -1,0 +1,2 @@
+import NewsResearch from '@/app/components/NewsResearch';import Footer from '@/app/components/Footer';
+export default function News(){return <div className="page"><div className="sectionHead"><div><p className="eyebrow">News + primary disclosures</p><h2>What is being reported, and what companies filed</h2></div><p>News aggregation has an independent RSS fallback, so a slow GDELT request no longer turns the whole page into a 502. SEC access is a clean gated state rather than a false server failure.</p></div><NewsResearch/><Footer/></div>}

@@ -1,0 +1,2 @@
+import WorldPulse from '@/app/components/WorldPulse';import Footer from '@/app/components/Footer';
+export default function World(){return <div className="page"><div className="sectionHead"><div><p className="eyebrow">World pulse</p><h2>Evidence outside the price chart</h2></div><p>Independent public sources are isolated by connector. This page fixes the prior solar-wind rendering failure and does not hide healthy feeds when one provider is degraded.</p></div><WorldPulse/><Footer/></div>}

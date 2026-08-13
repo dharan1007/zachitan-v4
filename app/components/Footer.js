@@ -1,0 +1,1 @@
+export default function Footer(){return <footer className="footer"><span>Zachitan v4 · experimental research platform</span><span><a href="/sources">Sources</a> · <a href="/methodology">Methodology</a> · <a href="/legal/privacy">Privacy</a> · <a href="/legal/terms">Terms</a> · <a href="/legal/beta">Beta disclosure</a></span></footer>}

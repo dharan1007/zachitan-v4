@@ -1,0 +1,2 @@
+import Watchlist from '@/app/components/Watchlist';import Footer from '@/app/components/Footer';
+export default function Page(){return <div className="page"><div className="sectionHead"><div><p className="eyebrow">Personal research workspace</p><h2>Watchlist</h2></div><p>Build a cross-asset list without an account, refresh source-backed snapshots, and jump into the full market lab.</p></div><Watchlist/><Footer/></div>}

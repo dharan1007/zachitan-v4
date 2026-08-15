@@ -1,0 +1,38 @@
+name: Benchmark Zachitan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [audit-benchmark-20260815]
+    paths:
+      - 'lib/forecast.mjs'
+      - 'lib/providers/**'
+      - 'scripts/benchmark.mjs'
+      - '.github/workflows/benchmark.yml'
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run real-market benchmark
+        run: npm run benchmark
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zachitan-benchmark-report
+          path: benchmark-output/report.json
+          if-no-files-found: warn
+          retention-days: 30

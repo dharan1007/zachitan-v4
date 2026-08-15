@@ -1,4 +1,10 @@
 node_modules
 .next
+coverage
+*.log
 *.local
 .env
+.env.*
+!.env.example
+.vercel
+.DS_Store

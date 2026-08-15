@@ -1,0 +1,28 @@
+name: Verify Zachitan
+
+on:
+  push:
+    branches: [master, audit-hardening-20260815]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Unit and contract tests
+        run: npm test
+      - name: Production build
+        run: npm run build

@@ -2,11 +2,22 @@ name: Benchmark Zachitan
 
 on:
   workflow_dispatch:
-  push:
-    branches: [audit-benchmark-20260815]
+  pull_request:
+    branches: [master]
     paths:
       - 'lib/forecast.mjs'
+      - 'lib/market-integrity.mjs'
       - 'lib/providers/**'
+      - 'app/api/data/route.js'
+      - 'scripts/benchmark.mjs'
+      - '.github/workflows/benchmark.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'lib/forecast.mjs'
+      - 'lib/market-integrity.mjs'
+      - 'lib/providers/**'
+      - 'app/api/data/route.js'
       - 'scripts/benchmark.mjs'
       - '.github/workflows/benchmark.yml'
   schedule:

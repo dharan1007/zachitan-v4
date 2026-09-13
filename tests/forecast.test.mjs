@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { quantile, weightedQuantile, indicators, microstructure, calibrationScore } from '../lib/forecast.mjs';
-import { candidateForecasts, ensembleForecast, validateEnsemble as validate, forecastV5 as forecast } from '../lib/model-v5.mjs';
+import { candidateForecasts, ensembleForecast, validateEnsemble as validate, forecastV5 as forecast, calibrateProbabilityAlpha, calibratedProbability } from '../lib/model-v5.mjs';
 
 function series(n = 1200, flat = false) {
   const out = [];
@@ -69,6 +69,23 @@ test('ensemble shrinks the published return toward zero when candidate disagreem
   assert.ok(e.shrink >= 0 && e.shrink <= 1);
 });
 
+test('probability calibration keeps demonstrated signal but collapses anti-skill toward 50/50', () => {
+  const predictive = [
+    { rawPUp: 0.70, outcomeUp: 1 }, { rawPUp: 0.68, outcomeUp: 1 },
+    { rawPUp: 0.30, outcomeUp: 0 }, { rawPUp: 0.35, outcomeUp: 0 },
+  ];
+  const anti = [
+    { rawPUp: 0.70, outcomeUp: 0 }, { rawPUp: 0.68, outcomeUp: 0 },
+    { rawPUp: 0.30, outcomeUp: 1 }, { rawPUp: 0.35, outcomeUp: 1 },
+  ];
+  const goodAlpha = calibrateProbabilityAlpha(predictive);
+  const badAlpha = calibrateProbabilityAlpha(anti);
+  assert.ok(goodAlpha > 0 && goodAlpha <= 1);
+  assert.equal(badAlpha, 0);
+  assert.ok(calibratedProbability(0.8, goodAlpha) > 0.5);
+  assert.equal(calibratedProbability(0.8, badAlpha), 0.5);
+});
+
 test('forecast emits ordered checkpoints and dependence-adjusted evidence', () => {
   const f = forecast(series(), 20);
   assert.equal(f.available, true);
@@ -95,6 +112,24 @@ test('forecast probability and interval bounds are valid', () => {
   assert.ok(f.direction.down >= 0 && f.direction.down <= 1);
   assert.ok(Math.abs(f.direction.up + f.direction.down - 1) < 1e-9);
   for (const k of [50, 80, 90]) assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
+});
+
+test('forecast applies validated probability shrinkage instead of reusing raw analogue confidence', () => {
+  const validation = {
+    available: true,
+    checks: 40,
+    ensembleSkillVsNoChange: 0.04,
+    skillVsNoChange: 0.04,
+    brierSkillVs50: 0.02,
+    probabilityCalibrationAlpha: 0.25,
+    candidateMae: { noChange: 0.02, momentum: 0.021, regime: 0.022, analogue: 0.02, ensemble: 0.019 },
+    coverage: { 50: 0.5, 80: 0.8, 90: 0.9 },
+  };
+  const f = forecast(series(), 12, validation);
+  assert.equal(f.decisionState, 'PUBLISHABLE');
+  assert.equal(f.probabilityModel, 'analogue-shrunk-to-50-v1');
+  assert.equal(f.probabilityCalibrationAlpha, 0.25);
+  assert.ok(Math.abs(f.direction.up - 0.5) <= 0.125 + 1e-9);
 });
 
 test('forecast abstains after an extreme terminal jump instead of publishing a point target', () => {
@@ -133,6 +168,8 @@ test('validation is non-overlapping and reports ensemble and legacy baseline ski
   assert.ok(Number.isFinite(v.legacyAnalogueSkillVsNoChange));
   assert.ok(Number.isFinite(v.brier));
   assert.ok(Number.isFinite(v.brierSkillVs50));
+  assert.ok(Number.isFinite(v.probabilityCalibrationAlpha));
+  assert.ok(v.probabilityCalibrationAlpha >= 0 && v.probabilityCalibrationAlpha <= 1);
   assert.ok(v.directionAccuracy >= 0 && v.directionAccuracy <= 1);
   assert.ok(v.ensembleDirectionAccuracy >= 0 && v.ensembleDirectionAccuracy <= 1);
   assert.ok(v.momentumDirectionAccuracy >= 0 && v.momentumDirectionAccuracy <= 1);

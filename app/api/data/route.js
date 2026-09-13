@@ -7,15 +7,17 @@ import { pulse } from '@/lib/providers/world.mjs';
 import { news } from '@/lib/providers/news.mjs';
 import { filings } from '@/lib/providers/sec.mjs';
 import { forecast, validate, indicators, microstructure } from '@/lib/forecast.mjs';
+import { normalizeCandles, marketSessionPolicy, applySessionForecastPolicy } from '@/lib/market-integrity.mjs';
 import { verifyProviderContracts } from '@/lib/provider-contracts.mjs';
 import { PRESETS, SOURCE_LEDGER } from '@/lib/catalog.mjs';
 
-export const dynamic = 'force-dynamic';
 verifyProviderContracts({ coinbase: cb, yahoo: yf, amfi, ecb });
 
 const INTERVAL_SEC = { '1m':60, '2m':120, '5m':300, '15m':900, '30m':1800, '1h':3600, '6h':21600, '1d':86400, '1wk':604800, '1mo':2592000 };
 const rateState = globalThis.__zachitanRateState || new Map();
+const analysisCache = globalThis.__zachitanAnalysisCache || new Map();
 globalThis.__zachitanRateState = rateState;
+globalThis.__zachitanAnalysisCache = analysisCache;
 
 function clientKey(request) {
   return String(request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'anonymous').split(',')[0].trim().slice(0, 80);
@@ -23,7 +25,7 @@ function clientKey(request) {
 
 function rateLimit(request, action) {
   if (action === 'health' || action === 'sources') return null;
-  const now = Date.now(), windowMs = 60_000, limit = action === 'market' ? 45 : 90;
+  const now = Date.now(), windowMs = 60_000, limit = action === 'market' ? 30 : action === 'search' ? 45 : 60;
   const key = `${clientKey(request)}:${action}`;
   const prev = rateState.get(key);
   const state = !prev || now - prev.started >= windowMs ? { started: now, count: 0 } : prev;
@@ -54,20 +56,25 @@ function inferStep(candles, interval) {
   return INTERVAL_SEC[interval] || 86400;
 }
 
-function marketQuality(candles, meta, provider) {
+function marketQuality(candles, meta, provider, session, integrity) {
   const newest = candles.at(-1)?.time || 0;
   const stale = Math.max(0, Date.now() / 1000 - newest);
   const step = inferStep(candles, meta.interval);
   const dailyLike = step >= 20 * 3600 || ['amfi', 'ecb'].includes(provider);
+  const sourceClosed = provider === 'yahoo' && session?.state !== 'REGULAR';
   const grace = dailyLike ? 4 * 86400 : step * 2;
   const horizon = dailyLike ? 8 * 86400 : step * 20;
-  const freshness = Math.max(0, 100 - Math.max(0, stale - grace) / Math.max(1, horizon) * 100);
+  const freshness = sourceClosed
+    ? null
+    : Math.max(0, 100 - Math.max(0, stale - grace) / Math.max(1, horizon) * 100);
   return {
     rows: candles.length,
     newest: newest ? new Date(newest * 1000).toISOString() : null,
     staleSeconds: Math.round(stale),
-    freshnessScore: Math.round(Math.min(100, freshness)),
+    freshnessScore: freshness == null ? null : Math.round(Math.min(100, freshness)),
+    freshnessStatus: sourceClosed ? 'market-closed-last-observation' : dailyLike ? 'reference-cadence' : 'live-cadence-check',
     timing: meta.marketState || 'source-dependent',
+    integrity,
   };
 }
 
@@ -87,7 +94,7 @@ function addForecastTimes(f, candles, meta, provider, interval) {
   const step = inferStep(candles, interval), last = candles.at(-1).time;
   const continuous = provider === 'coinbase';
   const dailyLike = step >= 20 * 3600 || ['amfi', 'ecb'].includes(provider) || interval === '1d';
-  const points = f.points.map(p => {
+  const points = (f.points || []).map(p => {
     let time = null, timeMode = 'observation-index';
     if (continuous) {
       time = last + p.bar * step;
@@ -101,16 +108,30 @@ function addForecastTimes(f, candles, meta, provider, interval) {
   return { ...f, points, timePolicy: continuous ? '24/7 market time' : dailyLike ? 'weekday business-day estimate; exchange holidays may differ' : 'observation-index only to avoid false overnight/session timestamps' };
 }
 
+function searchScore(x, term) {
+  const q = term.toLowerCase();
+  const symbol = String(x.symbol || '').toLowerCase();
+  const name = String(x.name || '').toLowerCase();
+  if (symbol === q) return 1000;
+  if (symbol.startsWith(q)) return 700 - Math.min(100, symbol.length - q.length);
+  if (name.startsWith(q)) return 500;
+  if (symbol.includes(q)) return 350;
+  if (name.includes(q)) return 250;
+  return 0;
+}
+
 async function searchAll(q) {
   const term = safeText(q, 60);
-  const local = PRESETS.filter(x => !term || x.symbol.toLowerCase().includes(term.toLowerCase()) || x.name.toLowerCase().includes(term.toLowerCase())).slice(0, 12);
+  const local = PRESETS.filter(x => !term || x.symbol.toLowerCase().includes(term.toLowerCase()) || x.name.toLowerCase().includes(term.toLowerCase())).slice(0, 16);
   if (!term) return local;
-  const [a, b, c] = await Promise.allSettled([yf.search(term), cb.searchProducts(term), amfi.search(term)]);
+  const upstream = term.length >= 2
+    ? await Promise.allSettled([yf.search(term), cb.searchProducts(term), amfi.search(term)])
+    : [];
   const out = [
     ...local,
-    ...(a.status === 'fulfilled' ? a.value : []),
-    ...(b.status === 'fulfilled' ? b.value : []),
-    ...(c.status === 'fulfilled' ? c.value : []),
+    ...(upstream[0]?.status === 'fulfilled' ? upstream[0].value : []),
+    ...(upstream[1]?.status === 'fulfilled' ? upstream[1].value : []),
+    ...(upstream[2]?.status === 'fulfilled' ? upstream[2].value : []),
   ];
   const seen = new Set();
   return out.filter(x => {
@@ -118,7 +139,31 @@ async function searchAll(q) {
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
-  }).slice(0, 35);
+  }).sort((a, b) => searchScore(b, term) - searchScore(a, term) || String(a.symbol).localeCompare(String(b.symbol))).slice(0, 30);
+}
+
+function analysisKey(provider, symbol, interval, range, horizon, candles) {
+  const last = candles.at(-1);
+  return `${provider}:${symbol}:${interval}:${range}:${horizon}:${last?.time || 0}:${last?.close || 0}:${candles.length}`;
+}
+
+function rememberAnalysis(key, value) {
+  analysisCache.set(key, { at: Date.now(), value });
+  if (analysisCache.size > 96) {
+    const oldest = [...analysisCache.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, analysisCache.size - 72);
+    for (const [k] of oldest) analysisCache.delete(k);
+  }
+  return value;
+}
+
+function analyzeMarket(provider, symbol, interval, range, horizon, candles) {
+  const key = analysisKey(provider, symbol, interval, range, horizon, candles);
+  const cached = analysisCache.get(key);
+  if (cached && Date.now() - cached.at < 15 * 60_000) return { ...cached.value, cacheHit: true };
+  const validation = validate(candles, horizon, 36);
+  const modelForecast = forecast(candles, horizon, validation);
+  const result = { validation, modelForecast, indicators: indicators(candles), cacheHit: false };
+  return rememberAnalysis(key, result);
 }
 
 async function market(u) {
@@ -160,16 +205,27 @@ async function market(u) {
     throw new Error(`Unsupported provider: ${provider}`);
   }
 
-  if (!candles?.length) throw new Error('No clean market rows were returned.');
-  const validation = validate(candles, horizon, 60);
-  const modelForecast = addForecastTimes(forecast(candles, horizon, validation), candles, meta, provider, meta.interval || interval);
-  const ind = indicators(candles);
+  const normalized = normalizeCandles(candles);
+  candles = normalized.candles;
+  if (!candles.length) throw new Error('No clean market rows were returned.');
+
+  const session = marketSessionPolicy({ provider, meta, interval: meta.interval || interval });
+  const analysis = analyzeMarket(provider, symbol, interval, range, horizon, candles);
+  const timedForecast = addForecastTimes(analysis.modelForecast, candles, meta, provider, meta.interval || interval);
+  const modelForecast = applySessionForecastPolicy(timedForecast, session);
   const micro = provider === 'coinbase' ? microstructure(book, trades) : null;
   return {
-    symbol, provider, meta, quote, candles, forecast: modelForecast, validation, indicators: ind,
-    microstructure: micro, quality: marketQuality(candles, meta, provider), provenance: sourceProvenance,
+    symbol, provider, meta, quote, candles, forecast: modelForecast, validation: analysis.validation, indicators: analysis.indicators,
+    microstructure: micro, session, quality: marketQuality(candles, meta, provider, session, normalized.diagnostics), provenance: sourceProvenance,
+    compute: { validationOriginsMax: 36, warmAnalysisCacheHit: analysis.cacheHit },
     asOf: new Date().toISOString(),
   };
+}
+
+function marketCacheControl(data) {
+  if (data?.provider === 'coinbase') return 'public, s-maxage=60, stale-while-revalidate=300';
+  if (data?.session?.state === 'REGULAR') return 'public, s-maxage=90, stale-while-revalidate=300';
+  return 'public, s-maxage=300, stale-while-revalidate=900';
 }
 
 function optionMetrics(d) {
@@ -186,14 +242,17 @@ export async function GET(request) {
   if (retryAfter) return Response.json({ ok: false, error: 'Rate limit exceeded', retryAfterSeconds: retryAfter }, { status: 429, headers: { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' } });
 
   try {
-    if (action === 'health') return json({ ok: true, version: '4.1.0-beta.1', time: new Date().toISOString(), truthContract: 'Observed values retain source/timing labels. Forecasts are experimental and expose baseline skill/calibration when sufficient history exists.' }, 200, 'no-store');
-    if (action === 'search') return json({ ok: true, results: await searchAll(u.searchParams.get('q') || '') }, 200, 'public, s-maxage=30, stale-while-revalidate=120');
-    if (action === 'market') return json({ ok: true, ...await market(u) }, 200, 'public, s-maxage=10, stale-while-revalidate=30');
+    if (action === 'health') return json({ ok: true, version: '4.2.0-beta.1', time: new Date().toISOString(), truthContract: 'Observed values retain source/timing labels. Forecasts abstain on closed/unverified sessions, regime breaks, and measured negative baseline skill.' }, 200, 'no-store');
+    if (action === 'search') return json({ ok: true, results: await searchAll(u.searchParams.get('q') || '') }, 200, 'public, s-maxage=300, stale-while-revalidate=900');
+    if (action === 'market') {
+      const data = await market(u);
+      return json({ ok: true, ...data }, 200, marketCacheControl(data));
+    }
     if (action === 'options') {
       const symbol = safeText(u.searchParams.get('symbol') || 'AAPL', 20);
       try {
         const d = await yf.options(symbol, u.searchParams.get('expiration'));
-        return json({ ok: true, state: 'CONNECTED', ...d, metrics: optionMetrics(d), provenance: { provider: 'Yahoo Finance options feed', synthetic: false, rights: 'Yahoo terms apply; not an OPRA entitlement', cadence: 'market-dependent / may be delayed' } }, 200, 'public, s-maxage=30, stale-while-revalidate=120');
+        return json({ ok: true, state: 'CONNECTED', ...d, metrics: optionMetrics(d), provenance: { provider: 'Yahoo Finance options feed', synthetic: false, rights: 'Yahoo terms apply; not an OPRA entitlement', cadence: 'market-dependent / may be delayed' } }, 200, 'public, s-maxage=60, stale-while-revalidate=300');
       } catch (e) {
         return json({ ok: true, state: 'DEGRADED', underlying: symbol, calls: [], puts: [], expirationDates: [], message: 'The public options session is unavailable. Zachitan did not substitute fabricated chain data.', error: e.message, provenance: { provider: 'Yahoo Finance options feed', synthetic: false, rights: 'Yahoo terms apply; not an OPRA entitlement' } }, 200, 'no-store');
       }
@@ -201,12 +260,12 @@ export async function GET(request) {
     if (action === 'world') {
       const lat = clampNumber(u.searchParams.get('lat'), -90, 90, 17.385), lon = clampNumber(u.searchParams.get('lon'), -180, 180, 78.4867);
       const country = safeText(u.searchParams.get('country') || 'IND', 3).toUpperCase();
-      return json({ ok: true, ...await pulse({ lat, lon, country }) }, 200, 'public, s-maxage=60, stale-while-revalidate=300');
+      return json({ ok: true, ...await pulse({ lat, lon, country }) }, 200, 'public, s-maxage=300, stale-while-revalidate=900');
     }
-    if (action === 'news') return json({ ok: true, asOf: new Date().toISOString(), ...await news(u.searchParams.get('q') || 'global markets') }, 200, 'public, s-maxage=60, stale-while-revalidate=180');
+    if (action === 'news') return json({ ok: true, asOf: new Date().toISOString(), ...await news(u.searchParams.get('q') || 'global markets') }, 200, 'public, s-maxage=180, stale-while-revalidate=600');
     if (action === 'filings') {
       const d = await filings(u.searchParams.get('q') || 'AAPL');
-      return json({ ok: true, asOf: new Date().toISOString(), ...d }, 200, d.state === 'GATED' ? 'public, s-maxage=300' : 'public, s-maxage=30, stale-while-revalidate=120');
+      return json({ ok: true, asOf: new Date().toISOString(), ...d }, 200, d.state === 'GATED' ? 'public, s-maxage=600' : 'public, s-maxage=120, stale-while-revalidate=600');
     }
     if (action === 'sources') return json({ ok: true, sources: SOURCE_LEDGER, presets: PRESETS }, 200, 'public, s-maxage=3600');
     return json({ ok: false, error: 'Unknown action' }, 404);

@@ -2,13 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const originalMode = process.env.ZACHITAN_RUNTIME_MODE;
-const originalApproved = process.env.ZACHITAN_COMMERCIAL_APPROVED_SOURCES;
 
 test.afterEach(() => {
   if (originalMode === undefined) delete process.env.ZACHITAN_RUNTIME_MODE;
   else process.env.ZACHITAN_RUNTIME_MODE = originalMode;
-  if (originalApproved === undefined) delete process.env.ZACHITAN_COMMERCIAL_APPROVED_SOURCES;
-  else process.env.ZACHITAN_COMMERCIAL_APPROVED_SOURCES = originalApproved;
 });
 
 test('research mode is the safe default for existing behavior', async () => {
@@ -18,28 +15,21 @@ test('research mode is the safe default for existing behavior', async () => {
   assert.equal(providerFetchAllowed('yahoo'), true);
 });
 
-test('commercial mode blocks unapproved provider-backed acquisition', async () => {
+test('commercial mode blocks all built-in provider-backed acquisition', async () => {
   process.env.ZACHITAN_RUNTIME_MODE = 'commercial';
-  delete process.env.ZACHITAN_COMMERCIAL_APPROVED_SOURCES;
   const { assertProviderFetchAllowed, providerFetchAllowed } = await import('../lib/commercial-policy.js');
   assert.equal(providerFetchAllowed('yahoo'), false);
+  assert.equal(providerFetchAllowed('internal-feed'), false);
   assert.throws(() => assertProviderFetchAllowed('yahoo'), /commercial mode/i);
 });
 
-test('commercial mode permits only explicitly approved sources', async () => {
-  process.env.ZACHITAN_RUNTIME_MODE = 'commercial';
-  process.env.ZACHITAN_COMMERCIAL_APPROVED_SOURCES = 'internal-feed,customer-feed';
-  const { providerFetchAllowed } = await import('../lib/commercial-policy.js');
-  assert.equal(providerFetchAllowed('internal-feed'), true);
-  assert.equal(providerFetchAllowed('yahoo'), false);
-});
-
-test('commercial capabilities disclose product boundary', async () => {
+test('commercial capabilities disclose zero-provider BYOD boundary', async () => {
   process.env.ZACHITAN_RUNTIME_MODE = 'commercial';
   const { commercialCapabilities } = await import('../lib/commercial-policy.js');
   const caps = commercialCapabilities();
   assert.equal(caps.runtimeMode, 'commercial');
   assert.equal(caps.byod, 'available');
+  assert.equal(caps.providerPolicy, 'blocked_in_commercial_build');
   assert.equal(caps.investmentAdvice, 'not_provided');
 });
 

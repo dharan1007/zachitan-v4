@@ -9,12 +9,13 @@ import { filings } from '@/lib/providers/sec.mjs';
 import { indicators, microstructure } from '@/lib/forecast.mjs';
 import { forecastV5, validateEnsemble } from '@/lib/model-v5.mjs';
 import { normalizeCandles, marketSessionPolicy, applySessionForecastPolicy } from '@/lib/market-integrity.mjs';
+import { addForecastObservationTimes } from '@/lib/market-time.mjs';
 import { verifyProviderContracts } from '@/lib/provider-contracts.mjs';
 import { PRESETS, SOURCE_LEDGER } from '@/lib/catalog.mjs';
 
 verifyProviderContracts({ coinbase: cb, yahoo: yf, amfi, ecb });
 
-const RELEASE_VERSION = '5.0.0-beta.1';
+const RELEASE_VERSION = '5.0.0-beta.2';
 const COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'unknown';
 const INTERVAL_SEC = { '1m':60, '2m':120, '5m':300, '15m':900, '30m':1800, '1h':3600, '6h':21600, '1d':86400, '1wk':604800, '1mo':2592000 };
 const rateState = globalThis.__zachitanRateState || new Map();
@@ -79,36 +80,6 @@ function marketQuality(candles, meta, provider, session, integrity) {
     timing: meta.marketState || 'source-dependent',
     integrity,
   };
-}
-
-function nextBusinessDay(sec, days) {
-  const d = new Date(sec * 1000);
-  let left = days;
-  while (left > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const day = d.getUTCDay();
-    if (day !== 0 && day !== 6) left -= 1;
-  }
-  return Math.floor(d.getTime() / 1000);
-}
-
-function addForecastTimes(f, candles, meta, provider, interval) {
-  if (!f?.available) return f;
-  const step = inferStep(candles, interval), last = candles.at(-1).time;
-  const continuous = provider === 'coinbase';
-  const dailyLike = step >= 20 * 3600 || ['amfi', 'ecb'].includes(provider) || interval === '1d';
-  const points = (f.points || []).map(p => {
-    let time = null, timeMode = 'observation-index';
-    if (continuous) {
-      time = last + p.bar * step;
-      timeMode = 'continuous-market-estimate';
-    } else if (dailyLike) {
-      time = nextBusinessDay(last, p.bar);
-      timeMode = 'business-day-estimate';
-    }
-    return { ...p, time, timeMode, observationLabel: `+${p.bar} market observation${p.bar === 1 ? '' : 's'}` };
-  });
-  return { ...f, points, timePolicy: continuous ? '24/7 market time' : dailyLike ? 'weekday business-day estimate; exchange holidays may differ' : 'observation-index only to avoid false overnight/session timestamps' };
 }
 
 function searchScore(x, term) {
@@ -214,7 +185,7 @@ async function market(u) {
 
   const session = marketSessionPolicy({ provider, meta, interval: meta.interval || interval });
   const analysis = analyzeMarket(provider, symbol, interval, range, horizon, candles);
-  const timedForecast = addForecastTimes(analysis.modelForecast, candles, meta, provider, meta.interval || interval);
+  const timedForecast = addForecastObservationTimes(analysis.modelForecast, candles, meta, provider, meta.interval || interval);
   const modelForecast = applySessionForecastPolicy(timedForecast, session, normalized.diagnostics);
   const micro = provider === 'coinbase' ? microstructure(book, trades) : null;
   return {
@@ -231,7 +202,7 @@ async function market(u) {
     publication: {
       state: modelForecast?.decisionState || 'UNAVAILABLE',
       modelStatus: modelForecast?.modelStatus || null,
-      reason: modelForecast?.abstainReason || null,
+      reason: modelForecast?.abstainReason || (modelForecast?.decisionState === 'RESEARCH_ONLY' ? analysis.validation?.reason || 'Numeric targets are withheld until walk-forward publication gates pass.' : null),
       pointModel: modelForecast?.pointModel || null,
     },
     analysisIdentity: analysis.analysisIdentity,
@@ -268,7 +239,7 @@ export async function GET(request) {
       commitSha: COMMIT_SHA,
       releaseState: 'beta',
       time: new Date().toISOString(),
-      truthContract: 'Observed values retain source/timing labels. V5 point forecasts use a past-only adaptive ensemble and abstain on closed/unverified sessions, critical data-integrity failures, regime breaks, and measured negative baseline skill.',
+      truthContract: 'Observed values retain source/timing labels. Numeric V5 targets publish only after past-only validation, session, integrity and regime gates pass. Exchange-bound future dates are not fabricated without a verifiable session/calendar.',
     }, 200, 'no-store');
     if (action === 'search') return json({ ok: true, results: await searchAll(u.searchParams.get('q') || '') }, 200, 'public, s-maxage=300, stale-while-revalidate=900');
     if (action === 'market') {

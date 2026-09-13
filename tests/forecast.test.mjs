@@ -18,6 +18,21 @@ function series(n = 1200, flat = false) {
   return out;
 }
 
+function withTerminalJump(multiplier = 1.45) {
+  const out = series();
+  const prev = out.at(-2).close;
+  const close = prev * multiplier;
+  out[out.length - 1] = {
+    ...out.at(-1),
+    open: prev * 1.01,
+    close,
+    high: close * 1.01,
+    low: prev * 0.995,
+    volume: out.at(-2).volume * 9,
+  };
+  return out;
+}
+
 test('quantile interpolates', () => assert.equal(quantile([1, 2, 3, 4], .5), 2.5));
 test('weighted quantile honors weight', () => assert.equal(weightedQuantile([1, 10], [.9, .1], .5), 1));
 test('forecast emits ordered checkpoints and dependence-adjusted evidence', () => {
@@ -36,6 +51,27 @@ test('forecast probability and interval bounds are valid', () => {
   assert.ok(f.direction.down >= 0 && f.direction.down <= 1);
   assert.ok(Math.abs(f.direction.up + f.direction.down - 1) < 1e-9);
   for (const k of [50, 80, 90]) assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
+});
+test('forecast abstains after an extreme terminal jump instead of publishing a point target', () => {
+  const f = forecast(withTerminalJump(), 12);
+  assert.equal(f.available, true);
+  assert.equal(f.decisionState, 'ABSTAIN');
+  assert.equal(f.center, null);
+  assert.match(f.abstainReason || '', /jump|regime|out-of-distribution/i);
+});
+test('forecast abstains when measured point and probability skill are both non-positive', () => {
+  const validation = {
+    available: true,
+    checks: 60,
+    skillVsNoChange: -0.08,
+    brierSkillVs50: -0.04,
+    coverage: { 50: 0.5, 80: 0.8, 90: 0.9 },
+  };
+  const f = forecast(series(), 12, validation);
+  assert.equal(f.available, true);
+  assert.equal(f.decisionState, 'ABSTAIN');
+  assert.equal(f.center, null);
+  assert.match(f.abstainReason || '', /skill|baseline/i);
 });
 test('validation is non-overlapping and reports real baseline skill metrics', () => {
   const v = validate(series(1600), 10, 60);

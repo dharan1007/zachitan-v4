@@ -17,6 +17,9 @@ export default function AssetSearch({value,onChange,onSelect,placeholder='Search
   if(!open)return;
   const id=++requestId.current;
   const key=q.toLowerCase();
+  if(q.length===1){
+   setResults([]);setActive(-1);setLoading(false);setError('Type one more character for live search.');return;
+  }
   if(cache.has(key)){
    setResults(cache.get(key));
    setActive(cache.get(key)?.length?0:-1);
@@ -39,7 +42,7 @@ export default function AssetSearch({value,onChange,onSelect,placeholder='Search
    }catch(e){
     if(e?.name!=='AbortError'&&id===requestId.current){setError(e?.message||'Search unavailable');setResults([])}
    }finally{if(id===requestId.current)setLoading(false)}
-  },q?120:0);
+  },q?300:0);
   return()=>{clearTimeout(t);ctrl.abort()};
  },[value,open]);
 
@@ -65,8 +68,8 @@ export default function AssetSearch({value,onChange,onSelect,placeholder='Search
    {loading?<span className="searchState">Searching…</span>:value?<button className="searchClear" type="button" onClick={()=>{onChange?.('');setOpen(true)}} aria-label="Clear search">×</button>:<span className="searchState">{help}</span>}
   </div>
   {open&&<div className="suggest" role="listbox">
-   <div className="suggestHead"><span>{value?.trim()?'Matches':'Suggested instruments'}</span><span>{loading?'Live search':''}</span></div>
-   {error&&<div className="suggestMessage bad">{error}</div>}
+   <div className="suggestHead"><span>{value?.trim()?'Matches':'Suggested instruments'}</span><span>{loading?'Searching connected sources':''}</span></div>
+   {error&&<div className={`suggestMessage ${value?.trim()?.length===1?'':'bad'}`}>{error}</div>}
    {!loading&&!error&&visible.length===0&&<div className="suggestMessage">No supported matches. Try a ticker, company, fund, index, future, FX pair or crypto symbol.</div>}
    {visible.map((x,i)=><button type="button" role="option" aria-selected={i===active} className={i===active?'active':''} key={`${x.provider}:${x.symbol}:${i}`} onMouseDown={e=>e.preventDefault()} onClick={()=>choose(x)} onMouseEnter={()=>setActive(i)}>
     <span className="suggestMain"><strong>{x.symbol}</strong><small>{x.name||x.symbol}</small></span>

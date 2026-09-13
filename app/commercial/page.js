@@ -1,7 +1,7 @@
 import Footer from '@/app/components/Footer';
 
-const onboardingUrl = process.env.NEXT_PUBLIC_ZACHITAN_ONBOARDING_URL || 'mailto:dharan@aphelion.life?subject=Zachitan%20Founding%20Workspace';
-const bundleUrl = process.env.NEXT_PUBLIC_ZACHITAN_BUNDLE_URL || 'mailto:dharan@aphelion.life?subject=Zachitan%20%2B%20Stanius%20Founding%20Bundle';
+const onboardingUrl = process.env.NEXT_PUBLIC_ZACHITAN_ONBOARDING_URL || 'https://tally.so/r/OD6BP8?utm_source=zachitan&utm_campaign=workspace';
+const bundleUrl = process.env.NEXT_PUBLIC_ZACHITAN_BUNDLE_URL || 'https://tally.so/r/OD6BP8?utm_source=zachitan&utm_campaign=bundle';
 
 export const metadata = {
   title: 'Zachitan Research Workspace',

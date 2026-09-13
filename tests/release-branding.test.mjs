@@ -8,11 +8,14 @@ test('release constants identify the deployed v5 beta line', () => {
   assert.equal(RELEASE_BADGE, 'V5 BETA');
 });
 
-test('shell and footer do not ship stale v4 branding', () => {
+test('shell, footer and root metadata do not ship stale v4 branding', () => {
   const shell = readFileSync(new URL('../app/components/Shell.js', import.meta.url), 'utf8');
   const footer = readFileSync(new URL('../app/components/Footer.js', import.meta.url), 'utf8');
+  const layout = readFileSync(new URL('../app/layout.js', import.meta.url), 'utf8');
   assert.doesNotMatch(shell, /V4 BETA/i);
   assert.doesNotMatch(footer, /Zachitan v4/i);
+  assert.doesNotMatch(layout, /Zachitan v4/i);
   assert.match(shell, /RELEASE_BADGE/);
   assert.match(footer, /RELEASE_VERSION/);
+  assert.match(layout, /RELEASE_LINE/);
 });

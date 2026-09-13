@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568 | tail -n 1)"
+          url="$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568 --env GITHUB_SHA="$GITHUB_SHA" | tail -n 1)"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $GITHUB_SHA to $url"
 

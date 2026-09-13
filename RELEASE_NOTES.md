@@ -1,3 +1,54 @@
+# Zachitan v4.2.0-beta.1 — Prediction Integrity and Runtime Efficiency
+
+Release candidate date: 2026-09-13
+Status: verification candidate
+
+This release is a correctness-first response to observed false precision, jump sensitivity, off-hours forecasting, broken/duplicated market points, noisy search/UI behavior, and excessive Vercel Hobby runtime consumption. It intentionally prefers abstention over publishing a numeric target that has not passed session, regime, and walk-forward skill gates.
+
+## Forecast publication gates
+
+- Added robust terminal-regime diagnostics using recent return dispersion, ATR scale, absolute move size, and volume context.
+- Extreme out-of-distribution jumps now force `ABSTAIN`; Zachitan keeps uncertainty evidence but withholds the center price and point path.
+- A forecast with measured non-positive point or probability skill versus naïve baselines now forces `ABSTAIN` instead of displaying a target anyway.
+- Forecast output now distinguishes `PUBLISHABLE`, `RESEARCH_ONLY`, and `ABSTAIN` decision states.
+- Yahoo-backed instruments are forecastable only when the upstream market state is `REGULAR`; `PRE`, `POST`, `CLOSED`, or unverified sessions do not publish a current target.
+- Coinbase remains 24/7 forecastable, with live price transport handled directly by its WebSocket.
+
+## Market-data integrity
+
+- Added deterministic candle normalization before indicators, validation, and forecasting.
+- Invalid OHLC rows are rejected, duplicate timestamps are collapsed, and out-of-order rows are sorted chronologically.
+- API responses now expose integrity diagnostics including input/clean row counts, rejected rows, duplicates, ordering defects, median step, and large gaps.
+- Freshness scoring no longer labels a known closed Yahoo session as if it were an actively stale live session.
+
+## Runtime and Vercel efficiency
+
+- Removed 15-second Coinbase and unconditional 45-second traditional-market API polling from Market Lab.
+- Coinbase price updates remain live through the venue WebSocket without repeated Vercel market-function executions.
+- Yahoo polling is now session-aware and, while `REGULAR`, no more frequent than two minutes for intraday snapshots; closed sessions stop background polling.
+- Yahoo chart snapshots now use warm-runtime TTL caching, and search caching was increased.
+- Expensive interactive forecast/validation results are cached by instrument, timeframe, horizon, and latest candle identity.
+- Interactive validation is capped at 36 non-overlapping origins; the independent real-market benchmark retains its 60-origin research setting.
+- Market/search/world/news/filing CDN TTLs were increased according to how quickly their source data can legitimately change.
+- Per-client API limits were tightened to reduce accidental or abusive function amplification.
+
+## Search and interface
+
+- Search results now rank exact ticker matches first, then symbol prefixes, name prefixes, and partial matches.
+- One-character remote search fan-out is suppressed and browser debounce was increased to reduce provider and function churn.
+- Market Lab now leads with instrument search, session state, forecast publication state, and data integrity.
+- Quick-market presets, model validation, technical indicators, microstructure, and options evidence are progressively disclosed instead of competing for attention on first load.
+- Numeric forecast overlays and forward checkpoint tables are shown only for `PUBLISHABLE` forecasts.
+
+## Verification governance
+
+- Added tests proving that extreme terminal jumps and measured negative skill withhold numeric targets.
+- Added tests for candle normalization, Yahoo off-session gating, Coinbase no-poll WebSocket policy, and session-based target suppression.
+- Real-market benchmark workflow now runs for forecast/data changes on pull requests and on `master`, in addition to the weekly schedule.
+- Broad claims that Zachitan can accurately predict markets remain prohibited unless the multi-asset benchmark and later untouched-holdout validation justify them.
+
+---
+
 # Zachitan v4.1.0-beta.1 — Audit Hardening Release
 
 Release candidate date: 2026-08-15

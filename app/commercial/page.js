@@ -1,5 +1,7 @@
+import { notFound } from 'next/navigation';
 import Footer from '@/app/components/Footer';
 
+const commercialMode = process.env.ZACHITAN_RUNTIME_MODE === 'commercial';
 const onboardingUrl = process.env.NEXT_PUBLIC_ZACHITAN_ONBOARDING_URL || 'https://tally.so/r/OD6BP8?utm_source=zachitan&utm_campaign=workspace';
 const bundleUrl = process.env.NEXT_PUBLIC_ZACHITAN_BUNDLE_URL || 'https://tally.so/r/OD6BP8?utm_source=zachitan&utm_campaign=bundle';
 
@@ -8,7 +10,9 @@ export const metadata = {
   description: 'Commercial research workspace for customer-supplied data, evidence and provenance.',
 };
 
-export default function Page(){return <div className="page overviewPage">
+export default function Page(){
+  if (!commercialMode) notFound();
+  return <div className="page overviewPage">
   <section className="overviewHero">
     <div className="card heroMain overviewLead">
       <p className="eyebrow">Zachitan founding workspace</p>

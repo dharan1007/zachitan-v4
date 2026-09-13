@@ -24,5 +24,9 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Unit and contract tests
         run: npm test
-      - name: Production build
+      - name: Research production build
+        run: npm run build
+      - name: Commercial provider-free build
+        env:
+          ZACHITAN_RUNTIME_MODE: commercial
         run: npm run build

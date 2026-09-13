@@ -1,7 +1,18 @@
 /** @type {import('next').NextConfig} */
+const commercialMode = String(process.env.ZACHITAN_RUNTIME_MODE || 'research').trim().toLowerCase() === 'commercial';
+
 const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  async rewrites() {
+    if (!commercialMode) return [];
+    return [
+      {
+        source: '/api/data',
+        destination: '/api/commercial-blocked',
+      },
+    ];
+  },
   async headers() {
     const common = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },

@@ -1,8 +1,9 @@
 import './globals.css';
 import Shell from '@/app/components/Shell';
+import { RELEASE_LINE } from '@/lib/release.mjs';
 
 export const metadata={
- title:'Zachitan v4 — Research Market Intelligence',
+ title:`Zachitan ${RELEASE_LINE} — Research Market Intelligence`,
  description:'Source-first multi-asset market and world intelligence research beta.',
  icons:{icon:'/favicon.svg'}
 };

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { quantile, weightedQuantile, forecast, validate, indicators, microstructure, calibrationScore, candidateForecasts, ensembleForecast } from '../lib/forecast.mjs';
+import { quantile, weightedQuantile, indicators, microstructure, calibrationScore } from '../lib/forecast.mjs';
+import { candidateForecasts, ensembleForecast, validateEnsemble as validate, forecastV5 as forecast } from '../lib/model-v5.mjs';
 
 function series(n = 1200, flat = false) {
   const out = [];

@@ -114,6 +114,14 @@ test('forecast probability and interval bounds are valid', () => {
   for (const k of [50, 80, 90]) assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
 });
 
+test('research-only forecasts do not expose numeric public targets', () => {
+  const f = forecast(series(240), 12);
+  assert.equal(f.available, true);
+  assert.equal(f.decisionState, 'RESEARCH_ONLY');
+  assert.equal(f.center, null);
+  assert.ok(f.points.every(point => point.price === null && point.change === null));
+});
+
 test('forecast applies validated probability shrinkage instead of reusing raw analogue confidence', () => {
   const validation = {
     available: true,

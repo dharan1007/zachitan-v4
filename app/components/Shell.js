@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {usePathname} from 'next/navigation';
+import {RELEASE_BADGE} from '@/lib/release.mjs';
 
 const nav=[
  ['Overview','/','◌'],
@@ -27,7 +28,7 @@ export default function Shell({children}){
  const active=h=>h==='/'?pathname==='/' : pathname===h||pathname.startsWith(`${h}/`);
  return <div className="app">
    <aside className="sidebar">
-    <a className="logo logoLink" href="/" aria-label="Zachitan overview"><div className="logoMark">Z</div><span>Zachitan</span><span className="beta">V4 BETA</span></a>
+    <a className="logo logoLink" href="/" aria-label="Zachitan overview"><div className="logoMark">Z</div><span>Zachitan</span><span className="beta">{RELEASE_BADGE}</span></a>
     <nav className="nav" aria-label="Primary navigation">
      {nav.map(([n,h,g])=><a href={h} key={h} className={active(h)?'active':''} aria-current={active(h)?'page':undefined}><span className="navGlyph">{g}</span><span>{n}</span><span className="navArrow">›</span></a>)}
     </nav>

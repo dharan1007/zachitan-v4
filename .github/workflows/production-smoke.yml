@@ -1,0 +1,35 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Optional exact production Git SHA to require
+        required: false
+        type: string
+  schedule:
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zachitan-production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify production truth contract
+        env:
+          ZACHITAN_BASE_URL: https://zachitan.vercel.app
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/production-smoke.mjs

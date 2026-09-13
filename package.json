@@ -8,10 +8,11 @@
     "start": "next start",
     "test": "node --test tests/*.test.mjs",
     "benchmark": "node scripts/benchmark.mjs",
+    "smoke:production": "node scripts/production-smoke.mjs",
     "verify": "npm test && npm run build"
   },
   "dependencies": {
-    "next": "16.2.11",
+    "next": "16.3.5",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },

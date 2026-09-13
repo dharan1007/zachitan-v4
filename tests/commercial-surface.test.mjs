@@ -23,6 +23,16 @@ test('commercial workspace states BYOD, pricing, intake and research boundaries'
   assert.match(page, /tally\.so\/r\/OD6BP8/);
 });
 
+test('research builds fail closed instead of exposing paid commercial CTAs', () => {
+  const page = read('app/commercial/page.js');
+  const footer = read('app/components/Footer.js');
+  assert.match(page, /notFound/);
+  assert.match(page, /ZACHITAN_RUNTIME_MODE/);
+  assert.match(page, /commercial/);
+  assert.match(footer, /ZACHITAN_RUNTIME_MODE/);
+  assert.match(footer, /commercialMode/);
+});
+
 test('data-rights page states customer responsibility', () => {
   const page = read('app/legal/data-rights/page.js');
   assert.match(page, /responsible/i);

@@ -1,0 +1,79 @@
+name: Deploy Zachitan Production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zachitan-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_APBZJjf6iizHCTuseqHosFnU
+      VERCEL_PROJECT_ID: prj_JDAQ8Vqu4mwUjnrjQBPWfp6wEoUS
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Checkout exact production source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Require authorized Vercel token
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN repository secret is not configured; refusing to claim or perform a production deployment."
+            exit 1
+          fi
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Pull production project settings
+        run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568
+
+      - name: Build exact commit for production
+        run: npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy prebuilt artifact to production
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568 --env GITHUB_SHA="$GITHUB_SHA" | tail -n 1)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $GITHUB_SHA to $url"
+
+      - name: Verify deployed release and source SHA
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          health=""
+          for attempt in 1 2 3 4 5 6; do
+            health="$(curl --fail --silent --show-error "$DEPLOY_URL/api/data?action=health" || true)"
+            if [ -n "$health" ]; then break; fi
+            sleep 5
+          done
+          if [ -z "$health" ]; then
+            echo "::error::Production health endpoint did not become reachable."
+            exit 1
+          fi
+          HEALTH_JSON="$health" EXPECTED_SHA="$GITHUB_SHA" node - <<'NODE'
+          const h = JSON.parse(process.env.HEALTH_JSON);
+          if (h.version !== '5.0.0-beta.1') throw new Error(`Expected 5.0.0-beta.1, received ${h.version}`);
+          if (h.commitSha !== process.env.EXPECTED_SHA) throw new Error(`Expected SHA ${process.env.EXPECTED_SHA}, received ${h.commitSha}`);
+          if (!h.ok) throw new Error('Health response is not ok');
+          console.log(`Verified Zachitan ${h.version} at ${h.commitSha}`);
+          NODE

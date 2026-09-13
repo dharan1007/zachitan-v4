@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { quantile, weightedQuantile, forecast, validate, indicators, microstructure, calibrationScore } from '../lib/forecast.mjs';
+import { quantile, weightedQuantile, indicators, microstructure, calibrationScore } from '../lib/forecast.mjs';
+import { candidateForecasts, ensembleForecast, validateEnsemble as validate, forecastV5 as forecast, calibrateProbabilityAlpha, calibratedProbability } from '../lib/model-v5.mjs';
 
 function series(n = 1200, flat = false) {
   const out = [];
@@ -35,6 +36,56 @@ function withTerminalJump(multiplier = 1.45) {
 
 test('quantile interpolates', () => assert.equal(quantile([1, 2, 3, 4], .5), 2.5));
 test('weighted quantile honors weight', () => assert.equal(weightedQuantile([1, 10], [.9, .1], .5), 1));
+
+test('candidate forecasts always include the no-change baseline and finite deterministic candidates', () => {
+  const c = candidateForecasts(series(), 12);
+  assert.equal(c.noChange, 0);
+  assert.ok(Number.isFinite(c.momentum));
+  assert.ok(Number.isFinite(c.regime));
+  assert.ok(Number.isFinite(c.analogue));
+});
+
+test('ensemble weights are normalized and expose disagreement', () => {
+  const e = ensembleForecast(series(), 12, null);
+  assert.equal(e.available, true);
+  const weights = Object.values(e.weights);
+  assert.ok(Math.abs(weights.reduce((s, x) => s + x, 0) - 1) < 1e-9);
+  assert.ok(weights.every(x => x >= 0 && x <= 1));
+  assert.ok(Number.isFinite(e.return));
+  assert.ok(Number.isFinite(e.disagreement));
+});
+
+test('ensemble shrinks the published return toward zero when candidate disagreement is high', () => {
+  const out = series();
+  for (let i = out.length - 30; i < out.length; i++) {
+    const direction = i % 2 ? 1.06 : 0.94;
+    const prev = out[i - 1].close;
+    const close = prev * direction;
+    out[i] = { ...out[i], open: prev, close, high: Math.max(prev, close) * 1.002, low: Math.min(prev, close) * 0.998 };
+  }
+  const e = ensembleForecast(out, 12, null);
+  assert.equal(e.available, true);
+  assert.ok(Math.abs(e.return) <= Math.max(...Object.values(e.candidates).map(Math.abs)) + 1e-12);
+  assert.ok(e.shrink >= 0 && e.shrink <= 1);
+});
+
+test('probability calibration keeps demonstrated signal but collapses anti-skill toward 50/50', () => {
+  const predictive = [
+    { rawPUp: 0.70, outcomeUp: 1 }, { rawPUp: 0.68, outcomeUp: 1 },
+    { rawPUp: 0.30, outcomeUp: 0 }, { rawPUp: 0.35, outcomeUp: 0 },
+  ];
+  const anti = [
+    { rawPUp: 0.70, outcomeUp: 0 }, { rawPUp: 0.68, outcomeUp: 0 },
+    { rawPUp: 0.30, outcomeUp: 1 }, { rawPUp: 0.35, outcomeUp: 1 },
+  ];
+  const goodAlpha = calibrateProbabilityAlpha(predictive);
+  const badAlpha = calibrateProbabilityAlpha(anti);
+  assert.ok(goodAlpha > 0 && goodAlpha <= 1);
+  assert.equal(badAlpha, 0);
+  assert.ok(calibratedProbability(0.8, goodAlpha) > 0.5);
+  assert.equal(calibratedProbability(0.8, badAlpha), 0.5);
+});
+
 test('forecast emits ordered checkpoints and dependence-adjusted evidence', () => {
   const f = forecast(series(), 20);
   assert.equal(f.available, true);
@@ -43,6 +94,16 @@ test('forecast emits ordered checkpoints and dependence-adjusted evidence', () =
   assert.ok(f.effectiveN <= f.rawEffectiveN + 1e-9);
   for (let i = 1; i < f.points.length; i++) assert.ok(f.points[i].bar > f.points[i - 1].bar);
 });
+
+test('forecast exposes ensemble diagnostics while keeping empirical uncertainty', () => {
+  const f = forecast(series(), 12);
+  assert.equal(f.available, true);
+  assert.equal(f.pointModel, 'adaptive-ensemble-v1');
+  assert.ok(f.ensemble?.available);
+  assert.ok(Number.isFinite(f.ensemble.return));
+  assert.ok(f.ranges[50][0] <= f.ranges[50][1]);
+});
+
 test('forecast probability and interval bounds are valid', () => {
   const f = forecast(series(), 12);
   assert.ok(f.evidenceScore >= 0 && f.evidenceScore <= 100);
@@ -52,6 +113,25 @@ test('forecast probability and interval bounds are valid', () => {
   assert.ok(Math.abs(f.direction.up + f.direction.down - 1) < 1e-9);
   for (const k of [50, 80, 90]) assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
 });
+
+test('forecast applies validated probability shrinkage instead of reusing raw analogue confidence', () => {
+  const validation = {
+    available: true,
+    checks: 40,
+    ensembleSkillVsNoChange: 0.04,
+    skillVsNoChange: 0.04,
+    brierSkillVs50: 0.02,
+    probabilityCalibrationAlpha: 0.25,
+    candidateMae: { noChange: 0.02, momentum: 0.021, regime: 0.022, analogue: 0.02, ensemble: 0.019 },
+    coverage: { 50: 0.5, 80: 0.8, 90: 0.9 },
+  };
+  const f = forecast(series(), 12, validation);
+  assert.equal(f.decisionState, 'PUBLISHABLE');
+  assert.equal(f.probabilityModel, 'analogue-shrunk-to-50-v1');
+  assert.equal(f.probabilityCalibrationAlpha, 0.25);
+  assert.ok(Math.abs(f.direction.up - 0.5) <= 0.125 + 1e-9);
+});
+
 test('forecast abstains after an extreme terminal jump instead of publishing a point target', () => {
   const f = forecast(withTerminalJump(), 12);
   assert.equal(f.available, true);
@@ -59,11 +139,13 @@ test('forecast abstains after an extreme terminal jump instead of publishing a p
   assert.equal(f.center, null);
   assert.match(f.abstainReason || '', /jump|regime|out-of-distribution/i);
 });
+
 test('forecast abstains when measured point and probability skill are both non-positive', () => {
   const validation = {
     available: true,
     checks: 60,
     skillVsNoChange: -0.08,
+    ensembleSkillVsNoChange: -0.08,
     brierSkillVs50: -0.04,
     coverage: { 50: 0.5, 80: 0.8, 90: 0.9 },
   };
@@ -73,33 +155,45 @@ test('forecast abstains when measured point and probability skill are both non-p
   assert.equal(f.center, null);
   assert.match(f.abstainReason || '', /skill|baseline/i);
 });
-test('validation is non-overlapping and reports real baseline skill metrics', () => {
+
+test('validation is non-overlapping and reports ensemble and legacy baseline skill separately', () => {
   const v = validate(series(1600), 10, 60);
   assert.equal(v.available, true);
   assert.ok(v.checks >= 18);
   assert.equal(v.nonOverlapping, true);
   assert.ok(v.originGapMin >= 10);
   assert.ok(Number.isFinite(v.maseNoChange));
+  assert.ok(Number.isFinite(v.skillVsNoChange));
+  assert.ok(Number.isFinite(v.ensembleSkillVsNoChange));
+  assert.ok(Number.isFinite(v.legacyAnalogueSkillVsNoChange));
   assert.ok(Number.isFinite(v.brier));
   assert.ok(Number.isFinite(v.brierSkillVs50));
+  assert.ok(Number.isFinite(v.probabilityCalibrationAlpha));
+  assert.ok(v.probabilityCalibrationAlpha >= 0 && v.probabilityCalibrationAlpha <= 1);
   assert.ok(v.directionAccuracy >= 0 && v.directionAccuracy <= 1);
+  assert.ok(v.ensembleDirectionAccuracy >= 0 && v.ensembleDirectionAccuracy <= 1);
   assert.ok(v.momentumDirectionAccuracy >= 0 && v.momentumDirectionAccuracy <= 1);
+  for (const key of ['noChange', 'momentum', 'regime', 'analogue', 'ensemble']) assert.ok(Number.isFinite(v.candidateMae[key]));
 });
+
 test('calibration is unavailable without validation and bounded with validation', () => {
   assert.equal(calibrationScore(null), null);
   const v = validate(series(1600), 10, 60);
   const s = calibrationScore(v);
   assert.ok(Number.isInteger(s) && s >= 0 && s <= 100);
 });
+
 test('flat market RSI is neutral instead of falsely overbought', () => {
   const x = indicators(series(300, true));
   assert.equal(x.rsi14, 50);
 });
+
 test('indicators are finite on ordinary data', () => {
   const x = indicators(series());
   assert.ok(Number.isFinite(x.rsi14));
   assert.ok(Number.isFinite(x.atrPct));
 });
+
 test('microstructure computes imbalance', () => {
   const m = microstructure({ bids: [{ price: 99, size: 2 }], asks: [{ price: 101, size: 1 }] }, [{ price: 100, size: 1, makerSide: 'sell' }]);
   assert.ok(m.bookImbalance > 0);

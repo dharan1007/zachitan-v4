@@ -6,13 +6,16 @@ import * as ecb from '@/lib/providers/ecb.mjs';
 import { pulse } from '@/lib/providers/world.mjs';
 import { news } from '@/lib/providers/news.mjs';
 import { filings } from '@/lib/providers/sec.mjs';
-import { forecast, validate, indicators, microstructure } from '@/lib/forecast.mjs';
+import { indicators, microstructure } from '@/lib/forecast.mjs';
+import { forecastV5, validateEnsemble } from '@/lib/model-v5.mjs';
 import { normalizeCandles, marketSessionPolicy, applySessionForecastPolicy } from '@/lib/market-integrity.mjs';
 import { verifyProviderContracts } from '@/lib/provider-contracts.mjs';
 import { PRESETS, SOURCE_LEDGER } from '@/lib/catalog.mjs';
 
 verifyProviderContracts({ coinbase: cb, yahoo: yf, amfi, ecb });
 
+const RELEASE_VERSION = '5.0.0-beta.1';
+const COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'unknown';
 const INTERVAL_SEC = { '1m':60, '2m':120, '5m':300, '15m':900, '30m':1800, '1h':3600, '6h':21600, '1d':86400, '1wk':604800, '1mo':2592000 };
 const rateState = globalThis.__zachitanRateState || new Map();
 const analysisCache = globalThis.__zachitanAnalysisCache || new Map();
@@ -160,9 +163,9 @@ function analyzeMarket(provider, symbol, interval, range, horizon, candles) {
   const key = analysisKey(provider, symbol, interval, range, horizon, candles);
   const cached = analysisCache.get(key);
   if (cached && Date.now() - cached.at < 15 * 60_000) return { ...cached.value, cacheHit: true };
-  const validation = validate(candles, horizon, 36);
-  const modelForecast = forecast(candles, horizon, validation);
-  const result = { validation, modelForecast, indicators: indicators(candles), cacheHit: false };
+  const validation = validateEnsemble(candles, horizon, 36);
+  const modelForecast = forecastV5(candles, horizon, validation);
+  const result = { validation, modelForecast, indicators: indicators(candles), cacheHit: false, analysisIdentity: key };
   return rememberAnalysis(key, result);
 }
 
@@ -212,11 +215,28 @@ async function market(u) {
   const session = marketSessionPolicy({ provider, meta, interval: meta.interval || interval });
   const analysis = analyzeMarket(provider, symbol, interval, range, horizon, candles);
   const timedForecast = addForecastTimes(analysis.modelForecast, candles, meta, provider, meta.interval || interval);
-  const modelForecast = applySessionForecastPolicy(timedForecast, session);
+  const modelForecast = applySessionForecastPolicy(timedForecast, session, normalized.diagnostics);
   const micro = provider === 'coinbase' ? microstructure(book, trades) : null;
   return {
-    symbol, provider, meta, quote, candles, forecast: modelForecast, validation: analysis.validation, indicators: analysis.indicators,
-    microstructure: micro, session, quality: marketQuality(candles, meta, provider, session, normalized.diagnostics), provenance: sourceProvenance,
+    symbol,
+    provider,
+    meta,
+    quote,
+    candles,
+    forecast: modelForecast,
+    validation: analysis.validation,
+    indicators: analysis.indicators,
+    microstructure: micro,
+    session,
+    publication: {
+      state: modelForecast?.decisionState || 'UNAVAILABLE',
+      modelStatus: modelForecast?.modelStatus || null,
+      reason: modelForecast?.abstainReason || null,
+      pointModel: modelForecast?.pointModel || null,
+    },
+    analysisIdentity: analysis.analysisIdentity,
+    quality: marketQuality(candles, meta, provider, session, normalized.diagnostics),
+    provenance: sourceProvenance,
     compute: { validationOriginsMax: 36, warmAnalysisCacheHit: analysis.cacheHit },
     asOf: new Date().toISOString(),
   };
@@ -242,7 +262,14 @@ export async function GET(request) {
   if (retryAfter) return Response.json({ ok: false, error: 'Rate limit exceeded', retryAfterSeconds: retryAfter }, { status: 429, headers: { 'Retry-After': String(retryAfter), 'Cache-Control': 'no-store' } });
 
   try {
-    if (action === 'health') return json({ ok: true, version: '4.2.0-beta.1', time: new Date().toISOString(), truthContract: 'Observed values retain source/timing labels. Forecasts abstain on closed/unverified sessions, regime breaks, and measured negative baseline skill.' }, 200, 'no-store');
+    if (action === 'health') return json({
+      ok: true,
+      version: RELEASE_VERSION,
+      commitSha: COMMIT_SHA,
+      releaseState: 'beta',
+      time: new Date().toISOString(),
+      truthContract: 'Observed values retain source/timing labels. V5 point forecasts use a past-only adaptive ensemble and abstain on closed/unverified sessions, critical data-integrity failures, regime breaks, and measured negative baseline skill.',
+    }, 200, 'no-store');
     if (action === 'search') return json({ ok: true, results: await searchAll(u.searchParams.get('q') || '') }, 200, 'public, s-maxage=300, stale-while-revalidate=900');
     if (action === 'market') {
       const data = await market(u);

@@ -1,3 +1,51 @@
+# Zachitan v5.0.0-beta.1 — Adaptive Ensemble and Verifiable Publication
+
+Release candidate date: 2026-09-13
+Status: verification candidate
+
+Zachitan v5 replaces the legacy analogue model as the sole point-estimate engine with a small deterministic adaptive ensemble while preserving the analogue engine for empirical uncertainty. The release is designed around selective publication: a model being able to calculate a number is no longer sufficient reason to show that number as a current forecast.
+
+## Point forecast architecture
+
+- Added a no-change baseline, volatility-adjusted momentum candidate, regime/trend-or-mean-reversion candidate, and the existing historical analogue candidate.
+- Candidate weights are learned from earlier completed walk-forward origins only; the current origin and its future outcome cannot influence its own weights.
+- The no-change candidate retains a minimum weight so more complex models must continuously earn deviation from the baseline.
+- Candidate disagreement is measured against recent realized-volatility scale and shrinks the ensemble center toward zero when models strongly disagree.
+- The legacy analogue distribution remains the source of empirical uncertainty intervals; the published point center is now the adaptive ensemble center.
+- Validation reports ensemble skill and legacy analogue skill separately so model changes cannot hide regressions behind one aggregate score.
+
+## Probability calibration
+
+- Direction probabilities are no longer copied directly from raw analogue confidence.
+- A past-only calibration coefficient is fitted to earlier resolved forecast origins and shrinks probability deviations toward 50/50.
+- If historical probability confidence was anti-skill, the calibration coefficient becomes zero and the product reports 50/50 rather than preserving misleading confidence.
+- Brier score, Brier skill, log loss and publication decisions use the calibrated probability actually exposed by v5.
+
+## Publication and data integrity
+
+- Critical candle corruption is an authoritative abstention gate, in addition to market-session and jump/regime gates.
+- Integrity diagnostics classify snapshots as `CLEAN`, `DEGRADED`, or `CRITICAL` using invalid-row, duplicate, ordering, and gap incidence.
+- Yahoo-backed instruments still require a `REGULAR` reported session for a current numeric target.
+- Coinbase remains continuously forecastable and uses its WebSocket for live browser price transport.
+- `PUBLISHABLE` requires positive chronological ensemble point skill and positive calibrated probability skill; otherwise the target is `RESEARCH_ONLY` or `ABSTAIN`.
+
+## Production serving and provenance
+
+- Expensive ensemble validation is reused by an exact analysis identity tied to provider, instrument, interval, range, horizon, latest candle timestamp/close, and row count.
+- Interactive validation remains capped at 36 non-overlapping origins while the independent benchmark uses 60.
+- Search provider fan-out, CDN TTLs, session-aware refresh, and rate limits remain optimized for Vercel Hobby operation.
+- Health responses expose release version and deployment commit SHA through `VERCEL_GIT_COMMIT_SHA`/`GITHUB_SHA` when available.
+- A deployment is not considered complete until the public production health endpoint reports the expected v5 release and merged commit SHA.
+
+## Benchmark governance
+
+- The real-market benchmark now compares v5 ensemble skill against no-change and the legacy analogue model on the same chronological origins.
+- Every change to `lib/model-v5.mjs` triggers the benchmark on pull requests and on `master`.
+- Broad market-accuracy claims remain prohibited unless the aggregate benchmark gate and a later frozen untouched publication holdout both support them.
+- The benchmark is an evaluation gate, not an automatic parameter tuner; model constants are not changed merely to optimize the repeatedly observed benchmark set.
+
+---
+
 # Zachitan v4.2.0-beta.1 — Prediction Integrity and Runtime Efficiency
 
 Release candidate date: 2026-09-13

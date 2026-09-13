@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as yf from '../lib/providers/yahoo.mjs';
 import * as cb from '../lib/providers/coinbase.mjs';
-import { validate } from '../lib/forecast.mjs';
+import { validateEnsemble } from '../lib/model-v5.mjs';
 
 const universe = [
   { symbol: 'AAPL', name: 'Apple', assetClass: 'US equity', provider: 'yahoo' },
@@ -37,7 +37,7 @@ for (const instrument of universe) {
   try {
     const candles = await history(instrument);
     for (const horizon of horizons) {
-      const v = validate(candles, horizon, 60);
+      const v = validateEnsemble(candles, horizon, 60);
       rows.push({
         ...instrument,
         horizon,
@@ -46,9 +46,13 @@ for (const instrument of universe) {
         checks: v.checks ?? 0,
         nonOverlapping: v.nonOverlapping ?? null,
         maseNoChange: v.maseNoChange ?? null,
-        skillVsNoChange: v.skillVsNoChange ?? null,
-        directionAccuracy: v.directionAccuracy ?? null,
+        ensembleSkillVsNoChange: v.ensembleSkillVsNoChange ?? null,
+        legacyAnalogueSkillVsNoChange: v.legacyAnalogueSkillVsNoChange ?? null,
+        ensembleDirectionAccuracy: v.ensembleDirectionAccuracy ?? null,
+        legacyDirectionAccuracy: v.legacyDirectionAccuracy ?? null,
         momentumDirectionAccuracy: v.momentumDirectionAccuracy ?? null,
+        candidateMae: v.candidateMae ?? null,
+        finalWeights: v.finalWeights ?? null,
         brier: v.brier ?? null,
         brierSkillVs50: v.brierSkillVs50 ?? null,
         logLoss: v.logLoss ?? null,
@@ -65,21 +69,25 @@ for (const instrument of universe) {
 
 const valid=rows.filter(x=>x.available);
 const uniqueInstruments=new Set(valid.map(x=>x.symbol)).size;
-const pointPositive=valid.filter(x=>x.skillVsNoChange>0).length;
+const pointPositive=valid.filter(x=>x.ensembleSkillVsNoChange>0).length;
 const probabilityPositive=valid.filter(x=>x.brierSkillVs50>0).length;
-const jointPositive=valid.filter(x=>x.skillVsNoChange>0&&x.brierSkillVs50>0).length;
+const jointPositive=valid.filter(x=>x.ensembleSkillVsNoChange>0&&x.brierSkillVs50>0).length;
+const ensembleBeatsLegacy=valid.filter(x=>Number.isFinite(x.ensembleSkillVsNoChange)&&Number.isFinite(x.legacyAnalogueSkillVsNoChange)&&x.ensembleSkillVsNoChange>x.legacyAnalogueSkillVsNoChange).length;
 const aggregate={
   requestedCases:rows.length,
   validCases:valid.length,
   uniqueInstruments,
-  medianSkillVsNoChange:median(valid.map(x=>x.skillVsNoChange)),
-  meanSkillVsNoChange:mean(valid.map(x=>x.skillVsNoChange)),
+  medianEnsembleSkillVsNoChange:median(valid.map(x=>x.ensembleSkillVsNoChange)),
+  meanEnsembleSkillVsNoChange:mean(valid.map(x=>x.ensembleSkillVsNoChange)),
+  medianLegacyAnalogueSkillVsNoChange:median(valid.map(x=>x.legacyAnalogueSkillVsNoChange)),
+  meanLegacyAnalogueSkillVsNoChange:mean(valid.map(x=>x.legacyAnalogueSkillVsNoChange)),
+  ensembleBeatsLegacyRate:valid.length?ensembleBeatsLegacy/valid.length:0,
   medianBrierSkillVs50:median(valid.map(x=>x.brierSkillVs50)),
   meanBrierSkillVs50:mean(valid.map(x=>x.brierSkillVs50)),
   pointPositiveRate:valid.length?pointPositive/valid.length:0,
   probabilityPositiveRate:valid.length?probabilityPositive/valid.length:0,
   jointPositiveRate:valid.length?jointPositive/valid.length:0,
-  medianDirectionAccuracy:median(valid.map(x=>x.directionAccuracy)),
+  medianDirectionAccuracy:median(valid.map(x=>x.ensembleDirectionAccuracy)),
 };
 
 const broadAccuracyGate = {
@@ -88,18 +96,20 @@ const broadAccuracyGate = {
   minimumJointPositiveRate: 0.65,
   minimumMedianPointSkill: 0.02,
   minimumMedianBrierSkill: 0.01,
+  minimumEnsembleBeatsLegacyRate: 0.55,
 };
 const broadAccuracyClaimAllowed =
   aggregate.validCases >= broadAccuracyGate.minimumValidCases &&
   aggregate.uniqueInstruments >= broadAccuracyGate.minimumUniqueInstruments &&
   aggregate.jointPositiveRate >= broadAccuracyGate.minimumJointPositiveRate &&
-  (aggregate.medianSkillVsNoChange ?? -Infinity) >= broadAccuracyGate.minimumMedianPointSkill &&
+  aggregate.ensembleBeatsLegacyRate >= broadAccuracyGate.minimumEnsembleBeatsLegacyRate &&
+  (aggregate.medianEnsembleSkillVsNoChange ?? -Infinity) >= broadAccuracyGate.minimumMedianPointSkill &&
   (aggregate.medianBrierSkillVs50 ?? -Infinity) >= broadAccuracyGate.minimumMedianBrierSkill;
 
 const report={
-  schemaVersion:1,
+  schemaVersion:2,
   generatedAt:new Date().toISOString(),
-  methodology:'Five-year daily histories where available. Zachitan walk-forward validation uses chronological prefixes and non-overlapping origins. Benchmarked against unchanged-price point error, 50/50 probability baseline, and simple horizon-momentum direction.',
+  methodology:'Five-year daily histories where available. Zachitan v5 uses chronological, non-overlapping walk-forward origins. Adaptive ensemble weights at each origin are learned only from earlier completed origins. Point forecasts are compared with unchanged-price, momentum, regime, and the v4 analogue model; probability forecasts remain compared with a 50/50 baseline.',
   universe,
   horizons,
   aggregate,

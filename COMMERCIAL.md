@@ -25,18 +25,24 @@ Commercial-safe routes include:
 
 The customer supplies data they own or are authorized to use. Zachitan does not grant exchange, publisher, or market-data licenses.
 
-## Founding offers
+## Founding offers and intake
 
-The commercial workspace page supports public-safe onboarding links through:
+The current zero-cost intake form is:
 
-- `NEXT_PUBLIC_ZACHITAN_ONBOARDING_URL`
-- `NEXT_PUBLIC_ZACHITAN_BUNDLE_URL`
+`https://tally.so/r/OD6BP8`
 
-When those values are absent, the page falls back to contact-based onboarding. Do not commit payment-processor secrets.
+The commercial workspace uses it by default and records UTM parameters for workspace/bundle attribution. The default offers are:
+
+- Zachitan research workspace setup — ₹2,999
+- Zachitan + Stanius founding bundle — ₹9,999
+
+The public-safe environment variables `NEXT_PUBLIC_ZACHITAN_ONBOARDING_URL` and `NEXT_PUBLIC_ZACHITAN_BUNDLE_URL` can replace those URLs later without changing application code. Do not commit payment-processor secrets.
+
+Payment is intentionally not collected inside the application yet. Scope and data-rights fit are reviewed first, then a payment instruction/link can be sent manually. This avoids building billing infrastructure before demand is established.
 
 ## Hosting boundary
 
-The existing Vercel Hobby project remains a research/demo deployment. Do not use that Hobby deployment as the paid production service. Use a hosting plan and data sources whose terms permit the final commercial use, or deliver the initial workspace locally/self-hosted.
+The existing Vercel Hobby project remains a research/demo deployment. Do not use that Hobby deployment as the paid production service. Use a hosting plan whose terms permit the final commercial use, or deliver the initial workspace locally/self-hosted.
 
 ## Product boundary
 

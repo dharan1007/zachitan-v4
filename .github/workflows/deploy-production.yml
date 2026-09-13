@@ -72,7 +72,7 @@ jobs:
           fi
           HEALTH_JSON="$health" EXPECTED_SHA="$GITHUB_SHA" node - <<'NODE'
           const h = JSON.parse(process.env.HEALTH_JSON);
-          if (h.version !== '5.0.0-beta.1') throw new Error(`Expected 5.0.0-beta.1, received ${h.version}`);
+          if (h.version !== '5.0.0-beta.2') throw new Error(`Expected 5.0.0-beta.2, received ${h.version}`);
           if (h.commitSha !== process.env.EXPECTED_SHA) throw new Error(`Expected SHA ${process.env.EXPECTED_SHA}, received ${h.commitSha}`);
           if (!h.ok) throw new Error('Health response is not ok');
           console.log(`Verified Zachitan ${h.version} at ${h.commitSha}`);

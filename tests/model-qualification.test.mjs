@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assessHoldoutRows } from '../lib/model-qualification.mjs';
-import { forecastV5 as forecast } from '../lib/model-v5.mjs';
+import { forecastV6 as forecast } from '../lib/model-v6.mjs';
 
 function series(n = 1200) {
   const out = [];

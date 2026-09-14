@@ -8,11 +8,13 @@ import {
   validateCoinbaseMarket,
 } from '../lib/production-smoke.mjs';
 
+const v6Truth = 'Numeric V6 targets require a frozen untouched holdout and recent-skill drift checks.';
+
 test('health smoke requires v6 and exact SHA when supplied', () => {
   const sha = 'a'.repeat(40);
-  validateHealth({ ok:true, version:'6.0.0-beta.1', commitSha:sha }, sha);
-  assert.throws(() => validateHealth({ ok:true, version:'6.0.0-beta.1', commitSha:sha }, 'b'.repeat(40)), /SHA/);
-  assert.throws(() => validateHealth({ ok:true, version:'5.0.0-beta.2', commitSha:sha }, sha), /v6/);
+  validateHealth({ ok:true, version:'6.0.0-beta.1', commitSha:sha, truthContract:v6Truth }, sha);
+  assert.throws(() => validateHealth({ ok:true, version:'6.0.0-beta.1', commitSha:sha, truthContract:v6Truth }, 'b'.repeat(40)), /SHA/);
+  assert.throws(() => validateHealth({ ok:true, version:'5.0.0-beta.2', commitSha:sha, truthContract:v6Truth }, sha), /v6/);
 });
 
 test('exact search requires AAPL first', () => {

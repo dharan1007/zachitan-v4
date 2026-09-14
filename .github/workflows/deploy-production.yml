@@ -15,7 +15,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       VERCEL_ORG_ID: team_APBZJjf6iizHCTuseqHosFnU
       VERCEL_PROJECT_ID: prj_JDAQ8Vqu4mwUjnrjQBPWfp6wEoUS
@@ -25,6 +25,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
+      - name: Verify checkout provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$GITHUB_SHA"
+          echo "Verified source checkout $actual"
 
       - name: Require authorized Vercel token
         shell: bash
@@ -39,6 +47,18 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Unit and contract gate
+        run: npm test
+
+      - name: High and critical dependency security gate
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Real-market benchmark execution gate
+        run: npm run benchmark
+
       - name: Pull production project settings
         run: npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568
 
@@ -50,11 +70,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568 --env GITHUB_SHA="$GITHUB_SHA" | tail -n 1)"
+          url="$(npx --yes vercel@latest deploy --prebuilt --prod --token="$VERCEL_TOKEN" --scope=tejs-projects-70bb4568 --env GITHUB_SHA="$GITHUB_SHA" --env VERCEL_GIT_COMMIT_SHA="$GITHUB_SHA" | tail -n 1)"
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed $GITHUB_SHA to $url"
 
-      - name: Verify deployed release and source SHA
+      - name: Verify deployed release and exact source SHA
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         shell: bash
@@ -71,9 +91,17 @@ jobs:
             exit 1
           fi
           HEALTH_JSON="$health" EXPECTED_SHA="$GITHUB_SHA" node - <<'NODE'
+          const fs = require('node:fs');
           const h = JSON.parse(process.env.HEALTH_JSON);
-          if (h.version !== '5.0.0-beta.2') throw new Error(`Expected 5.0.0-beta.2, received ${h.version}`);
+          const expectedVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          if (h.version !== expectedVersion) throw new Error(`Expected ${expectedVersion}, received ${h.version}`);
           if (h.commitSha !== process.env.EXPECTED_SHA) throw new Error(`Expected SHA ${process.env.EXPECTED_SHA}, received ${h.commitSha}`);
           if (!h.ok) throw new Error('Health response is not ok');
           console.log(`Verified Zachitan ${h.version} at ${h.commitSha}`);
           NODE
+
+      - name: Run production smoke contract
+        env:
+          ZACHITAN_BASE_URL: ${{ steps.deploy.outputs.url }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: npm run smoke:production

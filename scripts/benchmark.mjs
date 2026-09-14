@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as yf from '../lib/providers/yahoo.mjs';
 import * as cb from '../lib/providers/coinbase.mjs';
 import { validateEnsemble } from '../lib/model-v5.mjs';
+import { evaluatePublicationHoldout } from '../lib/model-holdout.mjs';
 
 const universe = [
   { symbol: 'AAPL', name: 'Apple', assetClass: 'US equity', provider: 'yahoo' },
@@ -22,22 +23,23 @@ async function history(x) {
 }
 
 function median(values) {
-  const a = values.filter(Number.isFinite).sort((a,b)=>a-b);
-  if (!a.length) return null;
-  const m = Math.floor(a.length/2);
-  return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
+  const xs = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const m = Math.floor(xs.length / 2);
+  return xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
 }
 function mean(values) {
-  const a=values.filter(Number.isFinite);
-  return a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
+  const xs = values.filter(Number.isFinite);
+  return xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null;
 }
 
-const rows=[];
+const rows = [];
 for (const instrument of universe) {
   try {
     const candles = await history(instrument);
     for (const horizon of horizons) {
       const v = validateEnsemble(candles, horizon, 60);
+      const q = evaluatePublicationHoldout(candles, horizon, { minimumChecks: 8, trainingChecks: 60 });
       rows.push({
         ...instrument,
         horizon,
@@ -49,45 +51,56 @@ for (const instrument of universe) {
         ensembleSkillVsNoChange: v.ensembleSkillVsNoChange ?? null,
         legacyAnalogueSkillVsNoChange: v.legacyAnalogueSkillVsNoChange ?? null,
         ensembleDirectionAccuracy: v.ensembleDirectionAccuracy ?? null,
-        legacyDirectionAccuracy: v.legacyDirectionAccuracy ?? null,
-        momentumDirectionAccuracy: v.momentumDirectionAccuracy ?? null,
         candidateMae: v.candidateMae ?? null,
         finalWeights: v.finalWeights ?? null,
         brier: v.brier ?? null,
         brierSkillVs50: v.brierSkillVs50 ?? null,
-        logLoss: v.logLoss ?? null,
-        coverage50: v.coverage?.[50] ?? null,
-        coverage80: v.coverage?.[80] ?? null,
-        coverage90: v.coverage?.[90] ?? null,
+        qualificationAvailable: !!q.available,
+        qualificationState: q.state ?? 'INSUFFICIENT',
+        qualified: !!q.qualified,
+        holdoutChecks: q.checks ?? 0,
+        holdoutPointSkillVsNoChange: q.pointSkillVsNoChange ?? null,
+        holdoutBrierSkillVs50: q.brierSkillVs50 ?? null,
+        holdoutDirectionAccuracy: q.directionAccuracy ?? null,
+        holdoutPointSkill90: q.confidence?.pointSkill90 ?? null,
+        holdoutBrierSkill90: q.confidence?.brierSkill90 ?? null,
+        driftDetected: !!q.drift?.detected,
+        qualificationReason: q.reason ?? null,
         reason: v.reason ?? null,
       });
     }
   } catch (error) {
-    for (const horizon of horizons) rows.push({ ...instrument, horizon, available:false, checks:0, error:error?.message||String(error) });
+    for (const horizon of horizons) rows.push({ ...instrument, horizon, available: false, checks: 0, qualificationAvailable: false, qualified: false, holdoutChecks: 0, error: error?.message || String(error) });
   }
 }
 
-const valid=rows.filter(x=>x.available);
-const uniqueInstruments=new Set(valid.map(x=>x.symbol)).size;
-const pointPositive=valid.filter(x=>x.ensembleSkillVsNoChange>0).length;
-const probabilityPositive=valid.filter(x=>x.brierSkillVs50>0).length;
-const jointPositive=valid.filter(x=>x.ensembleSkillVsNoChange>0&&x.brierSkillVs50>0).length;
-const ensembleBeatsLegacy=valid.filter(x=>Number.isFinite(x.ensembleSkillVsNoChange)&&Number.isFinite(x.legacyAnalogueSkillVsNoChange)&&x.ensembleSkillVsNoChange>x.legacyAnalogueSkillVsNoChange).length;
-const aggregate={
-  requestedCases:rows.length,
-  validCases:valid.length,
+const valid = rows.filter(x => x.available);
+const holdoutValid = rows.filter(x => x.qualificationAvailable);
+const uniqueInstruments = new Set(valid.map(x => x.symbol)).size;
+const pointPositive = valid.filter(x => x.ensembleSkillVsNoChange > 0).length;
+const probabilityPositive = valid.filter(x => x.brierSkillVs50 > 0).length;
+const jointPositive = valid.filter(x => x.ensembleSkillVsNoChange > 0 && x.brierSkillVs50 > 0).length;
+const ensembleBeatsLegacy = valid.filter(x => Number.isFinite(x.ensembleSkillVsNoChange) && Number.isFinite(x.legacyAnalogueSkillVsNoChange) && x.ensembleSkillVsNoChange > x.legacyAnalogueSkillVsNoChange).length;
+const holdoutQualified = holdoutValid.filter(x => x.qualified).length;
+const aggregate = {
+  requestedCases: rows.length,
+  validCases: valid.length,
+  holdoutValidCases: holdoutValid.length,
   uniqueInstruments,
-  medianEnsembleSkillVsNoChange:median(valid.map(x=>x.ensembleSkillVsNoChange)),
-  meanEnsembleSkillVsNoChange:mean(valid.map(x=>x.ensembleSkillVsNoChange)),
-  medianLegacyAnalogueSkillVsNoChange:median(valid.map(x=>x.legacyAnalogueSkillVsNoChange)),
-  meanLegacyAnalogueSkillVsNoChange:mean(valid.map(x=>x.legacyAnalogueSkillVsNoChange)),
-  ensembleBeatsLegacyRate:valid.length?ensembleBeatsLegacy/valid.length:0,
-  medianBrierSkillVs50:median(valid.map(x=>x.brierSkillVs50)),
-  meanBrierSkillVs50:mean(valid.map(x=>x.brierSkillVs50)),
-  pointPositiveRate:valid.length?pointPositive/valid.length:0,
-  probabilityPositiveRate:valid.length?probabilityPositive/valid.length:0,
-  jointPositiveRate:valid.length?jointPositive/valid.length:0,
-  medianDirectionAccuracy:median(valid.map(x=>x.ensembleDirectionAccuracy)),
+  medianEnsembleSkillVsNoChange: median(valid.map(x => x.ensembleSkillVsNoChange)),
+  meanEnsembleSkillVsNoChange: mean(valid.map(x => x.ensembleSkillVsNoChange)),
+  medianLegacyAnalogueSkillVsNoChange: median(valid.map(x => x.legacyAnalogueSkillVsNoChange)),
+  ensembleBeatsLegacyRate: valid.length ? ensembleBeatsLegacy / valid.length : 0,
+  medianBrierSkillVs50: median(valid.map(x => x.brierSkillVs50)),
+  pointPositiveRate: valid.length ? pointPositive / valid.length : 0,
+  probabilityPositiveRate: valid.length ? probabilityPositive / valid.length : 0,
+  jointPositiveRate: valid.length ? jointPositive / valid.length : 0,
+  medianDirectionAccuracy: median(valid.map(x => x.ensembleDirectionAccuracy)),
+  holdoutQualifiedRate: holdoutValid.length ? holdoutQualified / holdoutValid.length : 0,
+  medianHoldoutPointSkill: median(holdoutValid.map(x => x.holdoutPointSkillVsNoChange)),
+  medianHoldoutBrierSkill: median(holdoutValid.map(x => x.holdoutBrierSkillVs50)),
+  medianHoldoutDirectionAccuracy: median(holdoutValid.map(x => x.holdoutDirectionAccuracy)),
+  driftDetectedRate: holdoutValid.length ? holdoutValid.filter(x => x.driftDetected).length / holdoutValid.length : 0,
 };
 
 const broadAccuracyGate = {
@@ -97,30 +110,39 @@ const broadAccuracyGate = {
   minimumMedianPointSkill: 0.02,
   minimumMedianBrierSkill: 0.01,
   minimumEnsembleBeatsLegacyRate: 0.55,
+  minimumHoldoutQualifiedRate: 0.65,
+  minimumMedianHoldoutPointSkill: 0.02,
+  minimumMedianHoldoutBrierSkill: 0.01,
 };
 const broadAccuracyClaimAllowed =
   aggregate.validCases >= broadAccuracyGate.minimumValidCases &&
   aggregate.uniqueInstruments >= broadAccuracyGate.minimumUniqueInstruments &&
   aggregate.jointPositiveRate >= broadAccuracyGate.minimumJointPositiveRate &&
   aggregate.ensembleBeatsLegacyRate >= broadAccuracyGate.minimumEnsembleBeatsLegacyRate &&
+  aggregate.holdoutQualifiedRate >= broadAccuracyGate.minimumHoldoutQualifiedRate &&
   (aggregate.medianEnsembleSkillVsNoChange ?? -Infinity) >= broadAccuracyGate.minimumMedianPointSkill &&
-  (aggregate.medianBrierSkillVs50 ?? -Infinity) >= broadAccuracyGate.minimumMedianBrierSkill;
+  (aggregate.medianBrierSkillVs50 ?? -Infinity) >= broadAccuracyGate.minimumMedianBrierSkill &&
+  (aggregate.medianHoldoutPointSkill ?? -Infinity) >= broadAccuracyGate.minimumMedianHoldoutPointSkill &&
+  (aggregate.medianHoldoutBrierSkill ?? -Infinity) >= broadAccuracyGate.minimumMedianHoldoutBrierSkill;
 
-const report={
-  schemaVersion:2,
-  generatedAt:new Date().toISOString(),
-  methodology:'Five-year daily histories where available. Zachitan v5 uses chronological, non-overlapping walk-forward origins. Adaptive ensemble weights at each origin are learned only from earlier completed origins. Point forecasts are compared with unchanged-price, momentum, regime, and the v4 analogue model; probability forecasts remain compared with a 50/50 baseline.',
+const report = {
+  schemaVersion: 3,
+  generatedAt: new Date().toISOString(),
+  methodology: 'Zachitan V6 uses chronological non-overlapping walk-forward validation plus a later untouched publication holdout. Candidate weights and probability calibration are frozen before the holdout window; holdout origins are never used to tune the model. Publication qualification also fails closed on recent holdout drift. Point skill is compared with unchanged price and probability skill with a 50/50 baseline.',
   universe,
   horizons,
   aggregate,
   broadAccuracyGate,
   broadAccuracyClaimAllowed,
   rows,
-  warning:broadAccuracyClaimAllowed ? 'This automated screen is positive evidence, not a guarantee or substitute for a frozen untouched publication holdout.' : 'Broad market-prediction accuracy claims are not permitted by this benchmark result.'
+  warning: broadAccuracyClaimAllowed ? 'The automated validation and untouched-holdout screen passed its stated thresholds. This is evidence, not a guarantee of future market performance.' : 'Broad market-prediction accuracy claims are not permitted by this benchmark result. V6 publication remains selective and fail-closed.',
 };
 
-const out=process.env.BENCHMARK_OUTPUT||'benchmark-output/report.json';
-await fs.mkdir(path.dirname(out),{recursive:true});
-await fs.writeFile(out,JSON.stringify(report,null,2));
-console.log(JSON.stringify(report,null,2));
-if(valid.length<8){console.error(`Only ${valid.length}/${rows.length} benchmark cases were usable.`);process.exitCode=2;}
+const out = process.env.BENCHMARK_OUTPUT || 'benchmark-output/report.json';
+await fs.mkdir(path.dirname(out), { recursive: true });
+await fs.writeFile(out, JSON.stringify(report, null, 2));
+console.log(JSON.stringify(report, null, 2));
+if (valid.length < 8 || holdoutValid.length < 8) {
+  console.error(`Only ${valid.length}/${rows.length} validation cases and ${holdoutValid.length}/${rows.length} untouched-holdout cases were usable.`);
+  process.exitCode = 2;
+}

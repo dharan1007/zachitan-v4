@@ -14,7 +14,7 @@ test('Yahoo intraday overnight closures are not missing-data gaps', () => {
 
 test('Yahoo intraday same-session outages remain real large gaps', () => {
   const start = Math.floor(Date.parse('2026-09-11T14:00:00Z') / 1000);
-  const rows = [0, 300, 600, 4200, 4500].map((offset, i) => ({ time: start + offset, open: 100 + i * 0.1, high: 101 + i * 0.1, low: 99 + i * 0.1, close: 100.2 + i * 0.1, volume: 10 + i }));
+  const rows = [0, 300, 600, 4800, 5100].map((offset, i) => ({ time: start + offset, open: 100 + i * 0.1, high: 101 + i * 0.1, low: 99 + i * 0.1, close: 100.2 + i * 0.1, volume: 10 + i }));
   const out = normalizeCandles(rows, { provider: 'yahoo', interval: '5m', timezone: 'America/New_York' });
   assert.equal(out.diagnostics.expectedClosureGapCount, 0);
   assert.equal(out.diagnostics.largeGapCount, 1);

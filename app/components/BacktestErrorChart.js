@@ -19,7 +19,13 @@ export default function BacktestErrorChart({history=[]}){
  const max=series.length?Math.max(.01,...series.map(r=>Math.max(r.model,r.baseline)))*1.1:1;
  const x=i=>P.left+chartW*i/Math.max(1,series.length-1);
  const y=v=>P.top+chartH*(1-v/max);
- const path=key=>series.map((r,i)=>(i===0?'M':'L')+x(i).toFixed(1)+' '+y(r[key]).toFixed(1)).join(' ');
+ const observedSteps=series.slice(1).map((r,i)=>r.t-series[i].t).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+ const usualStep=observedSteps.length?observedSteps[Math.floor((observedSteps.length-1)/2)]:null;
+ const isGap=i=>i>0&&usualStep&&series[i].t-series[i-1].t>usualStep*1.5;
+ const missingSlots=series.reduce((n,r,i)=>n+(isGap(i)?1:0),0);
+ // The x-axis is an ordered trading-observation axis. Break line segments
+ // at missing source times instead of implying continuous realized accuracy.
+ const path=key=>series.map((r,i)=>(i===0||isGap(i)?'M':'L')+x(i).toFixed(1)+' '+y(r[key]).toFixed(1)).join(' ');
  const from=v=>Number.isFinite(v)?v.toFixed(v<.1?3:2)+'%':'—';
  const stamp=v=>new Date(Number(v)*1000).toLocaleString();
  return <div aria-label={'Actual consecutive reconstructed historical '+field+' prediction errors, compared with the naive baseline'} style={{margin:'17px 0 14px'}}>
@@ -43,9 +49,9 @@ export default function BacktestErrorChart({history=[]}){
     <div style={{display:'flex',flexWrap:'wrap',gap:15,fontSize:11,color:'#586571',padding:'3px 8px 8px'}}>
      <span><span aria-hidden="true" style={{display:'inline-block',width:20,height:3,background:'#2860c9',verticalAlign:'middle',marginRight:4}}/>Reconstructed model error</span>
      <span><span aria-hidden="true" style={{display:'inline-block',width:20,height:3,background:'#96a2ad',verticalAlign:'middle',marginRight:4}}/>Naive baseline error</span>
-     <span>{series.length} eligible consecutive recorded origins within the available source history</span>
+     <span>{series.length} eligible published outcomes · {missingSlots} observed timeline breaks (closure or provider gap)</span>
     </div>
    </div>}
-  <p className="muted" style={{fontSize:11,lineHeight:1.5,marginTop:5}}>The chart plots absolute percentage error at each already completed observation, not projected future profit. It never plots an unobserved outcome. Gaps in the publisher&apos;s actual trading calendar are not filled with invented prices.</p>
+  <p className="muted" style={{fontSize:11,lineHeight:1.5,marginTop:5}}>The chart plots absolute percentage error at each already completed observation, not projected future profit. It never plots an unobserved outcome. Gaps in the publisher&apos;s actual trading calendar and missing source candles break the plotted line; they are not filled with invented values. The horizontal axis orders published observations rather than pretending every calendar minute is a trading session.</p>
  </div>;
 }

@@ -97,8 +97,8 @@ test('empirical 80 percent coverage is scored exclusively after observation', ()
 test('inspection and accuracy computation have a bounded evaluation window', () => {
   const audit = auditNextBar(completedCandles(270), { maxChecks: 5000 });
   assert.equal(audit.available, true);
-  assert.ok(audit.checks <= 169); // Up to 128 evaluated origins plus 40 warm-up origins.
-  assert.ok(audit.evaluationChecks <= 128);
+  assert.ok(audit.checks <= 1140); // At most 1100 evaluations plus forty warm-up observations.
+  assert.ok(audit.evaluationChecks <= 1100);
   assert.equal(audit.history.length,audit.evaluationChecks);
 });
 

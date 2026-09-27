@@ -174,8 +174,8 @@ async function issueOne(env,symbol,candles,now){
  const raw=candidateForecast(current,previous),base=naive(current);
  if(!raw)return {issued:false,reason:'Invalid publisher OHLC'};
  const rows=(await env.DB.prepare(
-  "SELECT id,raw_json,baseline_json,observed_json FROM predictions WHERE symbol=? AND interval='5m' AND state='SETTLED' ORDER BY origin_time DESC LIMIT 40"
- ).bind(symbol).all()).results||[];
+  "SELECT id,raw_json,baseline_json,observed_json FROM predictions WHERE symbol=? AND interval='5m' AND model_version=? AND state='SETTLED' ORDER BY origin_time DESC LIMIT 40"
+ ).bind(symbol,MODEL_VERSION).all()).results||[];
  const matureEvidence=rows.slice().reverse();
  const {predicted,parameters}=adaptForecast(raw,base,matureEvidence);
  const calibrationRecord={fieldWeights:parameters,
@@ -235,8 +235,8 @@ async function report(request,env){
  if(!symbol)return json({ok:false,reason:'Unknown instrument'},400,'no-store');
  const limit=floor(Math.trunc(Number(u.searchParams.get('limit'))||36),1,120);
  const history=(await env.DB.prepare(
-  "SELECT id,provider,symbol,interval,model_version,origin_time,expected_time,issued_at,source_json,predicted_json,baseline_json,observed_json,settled_at,parameters_json,state FROM predictions WHERE symbol=? ORDER BY origin_time DESC LIMIT ?"
- ).bind(symbol,limit).all()).results||[];
+  "SELECT id,provider,symbol,interval,model_version,origin_time,expected_time,issued_at,source_json,predicted_json,baseline_json,observed_json,settled_at,parameters_json,state FROM predictions WHERE symbol=? AND model_version=? ORDER BY origin_time DESC LIMIT ?"
+ ).bind(symbol,MODEL_VERSION,limit).all()).results||[];
  const last=(await env.DB.prepare('SELECT slot,started_at,finished_at,issued,settled,gaps,tracked,fresh_sources,failures_json FROM run_slots ORDER BY slot DESC LIMIT 1').first());
  const computed=summarizeIssued(history);
  return json({ok:true,provider:PROVIDER,symbol,modelVersion:MODEL_VERSION,

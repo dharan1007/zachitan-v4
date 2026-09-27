@@ -57,3 +57,44 @@
 @media(max-width:620px){.researchMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}.researchResultTop{flex-wrap:wrap}.chartWrap{height:410px}}
 
 .chartHistoryWrap{background:#fff;border:1px solid #dde5ec;border-radius:14px;overflow:hidden;padding:8px 10px;max-width:1100px;margin-inline:auto}
+
+
+/* V6 transparent research chart: readable values and accessible indicators. */
+.chartPanel{min-width:0;width:100%;justify-self:center}
+.chartWrap{position:relative;height:560px;min-width:0}
+.chartIndicatorMenu{position:absolute;top:10px;left:12px;z-index:7;max-width:calc(100% - 160px)}
+.chartIndicatorMenu details{position:relative}
+.chartIndicatorMenu summary{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:8px 12px;color:#142332;font-size:13px;font-weight:800;border:1px solid #bcc7d4;background:#fff;box-shadow:0 2px 8px rgba(9,29,51,.06);list-style:none;cursor:pointer}
+.chartIndicatorMenu summary::-webkit-details-marker{display:none}
+.chartIndicatorMenu summary:focus-visible,.indicatorMenuList input:focus-visible{outline:3px solid #2d63d7;outline-offset:2px}
+.indicatorMenuList{position:absolute;left:0;top:calc(100% + 8px);z-index:10;display:grid;gap:0;width:min(355px,80vw);max-height:min(460px,75vh);overflow:auto;padding:10px;border:1px solid #cbd4dd;border-radius:12px;background:#fff;box-shadow:0 20px 46px rgba(16,32,51,.18)}
+.indicatorMenuList p{margin:2px 5px 8px;font-size:12px;line-height:1.5;color:#3f4d5b}
+.indicatorMenuList label{display:flex;gap:10px;align-items:center;min-height:39px;padding:7px 9px;border-radius:8px;font-size:13px;font-weight:670;line-height:1.35;color:#172638;cursor:pointer}
+.indicatorMenuList label:hover{background:#f0f5fc}
+.indicatorMenuList input{width:17px;height:17px;accent-color:#2259ae;flex:none}
+.chartIndicatorMenu .indicatorMenuList span{flex:none}
+.marketChartReadout{position:absolute;top:63px;left:12px;right:12px;z-index:4;display:grid;gap:6px;width:max-content;max-width:calc(100% - 24px);padding:10px 13px;border:1px solid #bdcbd8;border-radius:11px;background:rgba(255,255,255,.98);box-shadow:0 3px 13px rgba(20,39,57,.09);color:#142438;font-size:13px;font-variant-numeric:tabular-nums;pointer-events:none}
+.marketChartReadout>b{font-size:13px;font-weight:830}
+.chartOHLC{display:flex;flex-wrap:wrap;gap:7px 14px;line-height:1.65}
+.chartOHLC span{white-space:nowrap;color:#374b60}
+.chartOHLC strong{padding-left:3px;color:#122336;font-size:14px;font-weight:850}
+.candleHistory{margin-top:20px;border-top:1px solid #dce3e9;padding:16px 3px 5px}
+.candleHistoryHead{display:flex;gap:18px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;margin-bottom:10px}
+.candleHistoryHead h3{margin:0 0 5px;color:#101d2b;font-size:19px;letter-spacing:-.025em}
+.candleHistoryHead p{max-width:900px;margin:0;color:#405064;font-size:13px;line-height:1.6}
+.candleHistoryHead label{display:flex;gap:8px;align-items:center;color:#25374b;font-size:13px;font-weight:740}
+.candleHistoryHead .select{width:auto;min-width:90px;padding:7px 9px}
+.candleHistoryScroll{width:100%;max-height:460px;overflow:auto;border:1px solid #dbe3ea;border-radius:11px;background:#fff}
+.candleTable{min-width:1130px;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+.candleTable th,.candleTable td{padding:11px 10px!important;border-bottom:1px solid #e8edf2!important;white-space:nowrap}
+.candleTable thead{position:sticky;top:0;z-index:2;background:#eef4fa;box-shadow:0 1px 0 #dbe3eb}
+.candleTable th{color:#293d54!important;font-size:11px!important;font-weight:850!important}
+.candleTable td{color:#142638;font-size:13px}
+.candleTable td:first-child,.candleTable th:first-child{position:sticky;left:0;background:#fff;border-right:1px solid #e1e9f0;z-index:1}
+.candleTable th:first-child{background:#eef4fa;z-index:3}
+.candleTable tbody tr:nth-child(even) td{background:#f9fbfd}
+.candleTable tbody tr:nth-child(even) td:first-child{background:#f9fbfd}
+.candleTable tbody tr:hover td,.candleTable tbody tr:hover td:first-child{background:#eef6ff}
+.candleHistoryFoot{margin:9px 2px 0;color:#45576b;font-size:12px;line-height:1.55}
+@media(max-width:900px){.chartWrap{height:500px}.chartIndicatorMenu{max-width:calc(100% - 130px)}.marketChartReadout{font-size:12px}.chartOHLC{gap:2px 9px}.chartOHLC strong{font-size:12px}}
+@media(max-width:620px){.chartWrap{height:470px}.chartIndicatorMenu{left:7px;top:7px}.chartIndicatorMenu summary{font-size:12px;padding:6px 9px;min-height:35px}.marketChartReadout{top:56px;left:7px;right:7px;max-width:calc(100% - 14px)}.chartHistoryScroll{max-height:400px}.candleHistoryHead h3{font-size:17px}}

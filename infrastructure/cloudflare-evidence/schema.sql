@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS predictions (
  state TEXT NOT NULL CHECK(state IN ('PENDING','SETTLED','UNOBSERVED_GAP')),
  observed_json TEXT,
  settled_at INTEGER,
- CHECK(expected_time=origin_time+300),
+ CHECK(expected_time=origin_time+600),
  CHECK((state='PENDING' AND observed_json IS NULL) OR (state='SETTLED' AND observed_json IS NOT NULL) OR (state='UNOBSERVED_GAP' AND observed_json IS NULL)),
  UNIQUE(provider,symbol,interval,origin_time,model_version)
 );

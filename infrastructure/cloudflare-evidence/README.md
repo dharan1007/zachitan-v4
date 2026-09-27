@@ -2,7 +2,7 @@
 
 Status in this repository: **IMPLEMENTATION ONLY / NOT DEPLOYED**. Never mark it "always running" until the deployed Worker confirms scheduler activity and genuine settled outcomes.
 
-Cloudflare Cron + a dedicated D1 database operate without GitHub Actions, Vercel Cron, Vercel Edge Functions, or an open browser. Cloudflare Free has finite invocation CPU and database limits. This initial independent model covers Coinbase Exchange 5-minute BTC-USD and ETH-USD only. Other markets, instruments, horizons and trading calendars require separately verifiable coverage. Do not claim that this initial deployment evaluates all asset classes.
+Cloudflare Cron + a dedicated D1 database operate without GitHub Actions, Vercel Cron, Vercel Edge Functions, or an open browser. Cloudflare Free has finite invocation CPU and database limits. This initial independent model covers Coinbase Exchange 5-minute BTC-USD and ETH-USD only. It forecasts the NEXT NOT-YET-OPEN candle, deliberately skipping the currently in-progress one: a 10-minute (two 5-minute source-bar) target beyond the last completed source origin. It is not a one-bar forecast. Other markets, instruments, horizons and trading calendars require separately verifiable coverage. Do not claim that this initial deployment evaluates all asset classes.
 
 ## Account-specific prerequisites
 The currently connected tools do not provide the user's Cloudflare project, D1 database, Worker deployment credentials or project-specific environment configuration. Do not attach this service to a database from another production application.
@@ -15,7 +15,7 @@ On a machine signed into the authorized Cloudflare account, from this folder:
 5. After at least two completed five-minute observation periods, check GET /health and GET /v1/report?symbol=BTC-USD. Confirm actuallyRunning is true and earlier issued forecasts have genuinely matured.
 6. Set the frontend public environment variable NEXT_PUBLIC_ZACHITAN_EVIDENCE_URL to that EXACT worker origin, and deploy the frontend. It calls Cloudflare directly and uses no extra Vercel API call for independent audit reads.
 
-Each forecast has a deterministic ID, source, original as-issued targets, separate baseline, source timestamp, model version and outcome timestamp. Only the scheduled handler writes. A genuine publisher candle at exactly the following five-minute slot can settle it. If the venue omits that interval, it is UNOBSERVED_GAP; no synthetic price or trade volume is substituted. Replayed API requests do not issue forecasts.
+Each forecast has a deterministic ID, source, original as-issued targets, separate baseline, source timestamp, model version and outcome timestamp. Only the scheduled handler writes. A genuine publisher candle at exactly the predeclared two-five-minute-step target slot can settle it. If the venue omits that interval, it is UNOBSERVED_GAP; no synthetic price or trade volume is substituted. Replayed API requests do not issue forecasts.
 
 This small edge model differs explicitly from the V6/analogue model displayed on the main market page. It chooses per-field adjustments only using previously settled forecasts. Until enough actually settled results are available, it publishes a labelled naive baseline for measurement, never a claim of positive skill. No bank consensus or broker order recommendation is manufactured.
 

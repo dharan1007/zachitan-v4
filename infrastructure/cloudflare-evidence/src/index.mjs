@@ -7,7 +7,11 @@
  */
 const PROVIDER='coinbase';
 const GRANULARITY=300;
-const MODEL_VERSION='edge-5m-ohlcv-v1';
+const MODEL_VERSION='edge-5m-preopen-v2';
+// Last source candle can finish after the next candle has already opened.
+// Target the FOLLOWING not-yet-open candle so opening-price forecasts truly
+// precede the target's open. Never score post-open prices as ex ante.
+const TARGET_OFFSET=2*GRANULARITY;
 const PRICE=['open','high','low','close'];
 const FIELDS=[...PRICE,'volume'];
 const floor=(x,a,b)=>Math.min(b,Math.max(a,x));
@@ -168,10 +172,12 @@ async function issueOne(env,symbol,candles,now){
   "SELECT raw_json,baseline_json,observed_json FROM predictions WHERE symbol=? AND interval='5m' AND state='SETTLED' ORDER BY origin_time DESC LIMIT 40"
  ).bind(symbol).all()).results||[];
  const {predicted,parameters}=adaptForecast(raw,base,rows.slice().reverse());
+ const expectedTime=current.time+TARGET_OFFSET;
+ if(now>=expectedTime)return {issued:false,reason:'Target opening price already observable; refusing retrospective issuance'};
  const id=PROVIDER+':'+symbol+':5m:'+current.time+':'+MODEL_VERSION;
  const row=(await env.DB.prepare(
   "INSERT OR IGNORE INTO predictions(id,provider,symbol,interval,model_version,origin_time,expected_time,issued_at,source_json,raw_json,baseline_json,predicted_json,parameters_json,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'PENDING')"
- ).bind(id,PROVIDER,symbol,'5m',MODEL_VERSION,current.time,current.time+GRANULARITY,
+ ).bind(id,PROVIDER,symbol,'5m',MODEL_VERSION,current.time,expectedTime,
   now,JSON.stringify(current),JSON.stringify(raw),JSON.stringify(base),
   JSON.stringify(predicted),JSON.stringify(parameters)).run());
  return {issued:!!row.meta?.changes,originTime:current.time};
@@ -218,6 +224,7 @@ async function report(request,env){
  const computed=summarizeIssued(history);
  return json({ok:true,provider:PROVIDER,symbol,modelVersion:MODEL_VERSION,
   liveSchedulerConfigured:true,source:'Coinbase Exchange public completed 5-minute OHLCV',
+  targetTiming:'Issued BEFORE target bar opens; one intervening unfinished bar is skipped. Two source-bar (10-minute) horizon from last completed origin.',
   lastScheduledRun:last||null,schedulerHealthy:!!last?.finished_at&&Date.now()/1000-last.finished_at<900,
   stats:computed,
   // No after-the-fact edits: actual values and original issuance are different columns.
@@ -226,7 +233,7 @@ async function report(request,env){
    observed:safeParse(x.observed_json),parameters:safeParse(x.parameters_json),
    source_json:undefined,predicted_json:undefined,baseline_json:undefined,
    observed_json:undefined,parameters_json:undefined})),
-  limits:'Only preconfigured crypto products are scheduled. Other assets and intervals are not autonomously verified. No guaranteed edge or execution price.'});
+  limits:'Pre-open, two 5-minute source-bar horizon only. Other assets and intervals are not autonomously verified. No guaranteed edge or execution price.'});
 }
 export default {
  async scheduled(_controller,env,ctx){

@@ -50,7 +50,7 @@ test('independent accuracy calculation uses only actually settled original predi
  const r=summarizeIssued([row('SETTLED',true),row('PENDING',false)]);
  assert.equal(r.settled,1);
  assert.equal(r.byField.close.checks,1);
- assert.equal(r.byField.close.meanAbsolutePercent,10);
+ assert.ok(Math.abs(r.byField.close.meanAbsolutePercent-10)<1e-10);
 });
 
 test('next-open forecast must be actually issued before its target candle has begun',()=>{

@@ -65,7 +65,7 @@ export default function MarketIndicatorPanels({candles=[],interval='5m',provider
    const latest=values.at(-1);
    return <div className="indicatorPanel" key={option.id}>
     <div className="indicatorPanelTitle"><h4>{option.label}</h4><span>{fmt(latest,option.id)} {option.unit==='units'?'source units':''} · last bar {date(maxTime)}</span></div>
-    <svg viewBox={'0 0 '+VW+' '+VH} role="img" aria-label={option.label+' over source timestamps; no gap interpolation'} className="indicatorGraph">
+    <div className="indicatorGraphScroll"><svg viewBox={'0 0 '+VW+' '+VH} role="img" aria-label={option.label+' over source timestamps; no gap interpolation'} className="indicatorGraph">
      {[0,.5,1].map((r,i)=>{
       const value=hi-r*(hi-lo),yy=y(value);
       return <g key={i}><line x1={P.l} x2={VW-P.r} y1={yy} y2={yy} stroke="#dce4ec" strokeDasharray="2 4"/>
@@ -76,7 +76,7 @@ export default function MarketIndicatorPanels({candles=[],interval='5m',provider
      {second?<path d={second} fill="none" stroke="#c07823" strokeWidth="2.1" strokeLinecap="round" strokeDasharray="5 4"/>:null}
      {[0,.5,1].map((r,i)=><text key={i} x={P.l+r*(VW-P.l-P.r)} y={VH-8} textAnchor={i===0?'start':i===2?'end':'middle'}
       fontSize="12" fill="#334d64">{new Date((minTime+r*(maxTime-minTime))*1000).toLocaleDateString()}</text>)}
-    </svg>
+    </svg></div>
     <p className="indicatorExplanation">{option.help} {second?'Blue: MACD; amber: its signal average. ':''}The horizontal axis uses observed timestamps; missing market records are not synthesized.</p>
    </div>
   })}

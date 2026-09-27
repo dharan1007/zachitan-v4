@@ -36,6 +36,10 @@ test('separate OHLCV outputs preserve candle inequalities and measured sample co
   }
   assert.ok(result.forecast.high >= Math.max(result.forecast.open, result.forecast.close));
   assert.ok(result.forecast.low <= Math.min(result.forecast.open, result.forecast.close));
+  assert.equal(result.forecast.range, result.forecast.high - result.forecast.low);
+  assert.equal(result.forecast.body, Math.abs(result.forecast.close - result.forecast.open));
+  assert.ok(result.accuracy.range.samples > 0);
+  assert.ok(result.accuracy.body.samples > 0);
   assert.equal(result.asIssuedLiveRecord, false);
   assert.equal(result.type, 'historical-prequential-reconstruction');
 });
@@ -59,7 +63,7 @@ test('forward reconstruction is exactly consistent with preceding issued forecas
   assert.equal(latestMatured.originTime, undefined);
   assert.equal(latestMatured.issuedAt, rows.at(-2).time);
   assert.equal(latestMatured.observedAt, rows.at(-1).time);
-  for (const field of ['open', 'high', 'low', 'close', 'volume']) {
+  for (const field of ['open', 'high', 'low', 'close', 'volume', 'range', 'body']) {
     assert.equal(before.forecast[field], latestMatured.predicted[field], field);
   }
 });

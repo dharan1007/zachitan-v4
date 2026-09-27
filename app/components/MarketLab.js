@@ -128,7 +128,7 @@ export default function MarketLab(){
        <div style={{overflowX:'auto'}}>
          <table className="table">
            <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Historical MAE</th><th>Naive MAE</th><th>Skill vs naive</th><th>Adjustment</th></tr></thead>
-           <tbody>{[['open','Next open'],['high','Next high'],['low','Next low'],['close','Next close'],['volume','Next traded volume']].map(([field,label])=>{
+           <tbody>{[['open','Next open'],['high','Next high'],['low','Next low'],['close','Next close'],['volume','Next traded volume'],['range','Full candle range (high − low)'],['body','Candle body (|close − open|)']].map(([field,label])=>{
              const stats=data.nextBar.accuracy?.[field]||{},band=data.nextBar.empirical80?.[field],parameter=data.nextBar.parameters?.[field]||{};
              return <tr key={field}>
                <td><b>{label}</b>{field==='volume'?<div className="muted" style={{fontSize:10}}>Per completed candle, only where reported</div>:null}</td>
@@ -146,7 +146,7 @@ export default function MarketLab(){
        <details style={{marginTop:18}}>
          <summary style={{cursor:'pointer',fontWeight:700}}>Observed interval coverage and historical predictions</summary>
          <div className="grid5" style={{marginTop:13,marginBottom:13}}>
-           {['open','high','low','close','volume'].map(field=>{
+           {['open','high','low','close','volume','range','body'].map(field=>{
              const c=data.nextBar.intervalCoverage?.[field]||{};
              return <div className="metric" key={field}><span>{field.toUpperCase()} · nominal 80%</span><b>{c.observed==null?'Insufficient':pct(c.observed)}</b><small>{c.checks||0} matured band checks</small></div>;
            })}
@@ -156,8 +156,8 @@ export default function MarketLab(){
              <thead><tr><th>Historical forecast origin</th><th>Observed next</th><th>Predicted O / H / L / C / volume</th><th>Observed O / H / L / C / volume</th><th>Close absolute error</th></tr></thead>
              <tbody>{(data.nextBar.history||[]).map((record,i)=><tr key={record.issuedAt+'-'+i}>
                <td>{date(record.issuedAt)}</td><td>{date(record.observedAt)}</td>
-               <td>{['open','high','low','close','volume'].map(k=>smart(record.predicted?.[k])).join(' / ')}</td>
-               <td>{['open','high','low','close','volume'].map(k=>smart(record.observed?.[k])).join(' / ')}</td>
+               <td>{['open','high','low','close','volume'].map(k=>smart(record.predicted?.[k])).join(' / ')}<div className="muted" style={{fontSize:10}}>Range {smart(record.predicted?.range)} · Body {smart(record.predicted?.body)}</div></td>
+               <td>{['open','high','low','close','volume'].map(k=>smart(record.observed?.[k])).join(' / ')}<div className="muted" style={{fontSize:10}}>Range {smart(record.observed?.range)} · Body {smart(record.observed?.body)}</div></td>
                <td>{record.absErrorPct?.close==null?'—':record.absErrorPct.close.toFixed(2)+'%'}</td>
              </tr>)}</tbody>
            </table>

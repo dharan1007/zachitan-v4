@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isUnfinishedYahooDailyBar} from '../lib/market-data-v6.mjs';
+import {isUnfinishedYahooDailyBar,isReferenceOnlySource} from '../lib/market-data-v6.mjs';
 const sec=s=>Date.parse(s)/1000;
 
 test('current exchange-local daily bar remains unfinished during US regular session',()=>{
@@ -19,4 +19,12 @@ test('Indian local trading date is determined by the exchange timezone, not UTC 
 test('missing source timestamp and closed sessions cannot remove a valid completed bar',()=>{
  assert.equal(isUnfinishedYahooDailyBar(null,{marketState:'REGULAR',timezone:'UTC'},sec('2026-09-25T12:00:00Z')),false);
  assert.equal(isUnfinishedYahooDailyBar(sec('2026-09-25T00:00:00Z'),{marketState:'CLOSED',timezone:'UTC'},sec('2026-09-25T12:00:00Z')),false);
+});
+
+test('mutual-fund NAV, ECB and AMFI reference values must not be represented as genuine OHLCV',()=>{
+ assert.equal(isReferenceOnlySource('yahoo',{assetClass:'mutual_fund'}),true);
+ assert.equal(isReferenceOnlySource('amfi',{}),true);
+ assert.equal(isReferenceOnlySource('ecb',{}),true);
+ assert.equal(isReferenceOnlySource('yahoo',{assetClass:'stock'}),false);
+ assert.equal(isReferenceOnlySource('coinbase',{assetClass:'crypto'}),false);
 });

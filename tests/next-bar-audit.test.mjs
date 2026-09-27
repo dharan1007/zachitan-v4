@@ -112,7 +112,7 @@ test('a missing 24/7 source interval cannot be scored as the next scheduled inte
  assert.ok(audit.evaluationChecks>24);
  assert.equal(audit.history.length,audit.evaluationChecks);
  for(const entry of audit.history){
-  assert.equal(entry.observedAt-entry.issuedAt,300,'Do not interpolate a missing Coinbase bar');
+  assert.equal(entry.observedAt-entry.issuedAt,600,'Target an un-opened candle two native bars later; do not interpolate');
  }
 });
 
@@ -124,4 +124,26 @@ test('historical visible checks include every eligible returned origin, not only
  assert.equal(audit.history.length,128);
  assert.equal(audit.firstEvaluationTime,audit.history[0].issuedAt);
  assert.equal(audit.lastEvaluationTime,audit.history.at(-1).observedAt);
+});
+
+test('crypto pre-open forecast targets two source intervals ahead without using not-yet-matured errors',()=>{
+ const rows=completedCandles(275);
+ const before=auditNextBar(rows.slice(0,-2),{provenance:'coinbase',interval:'5m'});
+ const after=auditNextBar(rows,{provenance:'coinbase',interval:'5m'});
+ assert.equal(before.horizonObservations,2);
+ assert.equal(before.targetTime,rows.at(-1).time);
+ assert.equal(after.horizonObservations,2);
+ assert.equal(after.targetTime,rows.at(-1).time+600);
+ const completed=after.history.at(-1);
+ assert.equal(completed.observedAt,rows.at(-1).time);
+ assert.equal(completed.issuedAt,rows.at(-3).time);
+ for(const field of ['open','high','low','close','volume','range','body'])
+  assert.equal(before.forecast[field],completed.predicted[field],
+   'The same forecast must be recoverable when its two-step outcome matures: '+field);
+ const mutated=rows.map(x=>({...x}));
+ mutated[mutated.length-1].close*=4;
+ mutated[mutated.length-1].high=Math.max(mutated.at(-1).high,mutated.at(-1).close);
+ const replay=auditNextBar(mutated,{provenance:'coinbase',interval:'5m'});
+ assert.equal(replay.history.at(-1).predicted.close,before.forecast.close,
+  'Changing an as-yet-unobserved target must never alter its earlier forecast');
 });

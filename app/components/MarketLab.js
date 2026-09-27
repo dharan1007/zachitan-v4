@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import InteractiveChart from './InteractiveChart';
 import BacktestErrorChart from './BacktestErrorChart';
 import IndependentVerification from './IndependentVerification';
+import MarketIndicatorPanels from './MarketIndicatorPanels';
 import { classifyGap } from '@/lib/candle-calendar.mjs';
 import Score from './Score';
 import SourceStatus from './SourceStatus';
@@ -135,6 +136,7 @@ export default function MarketLab(){
    </div>
 
    <div className="card chartPanel"><div className="chartToolbar"><div><b style={{fontSize:13}}>{meta.referenceValueOnly?'Published reference values':'Observed market data'}</b><div className="muted" style={{fontSize:10,marginTop:2}}>{publishable?'Validated forecast overlay is enabled.':'Forecast overlay is withheld until publication gates pass.'} Drag to pan · wheel or +/− to zoom</div></div><SourceStatus provider={data?.provenance?.provider||selection.provider} state={data?'CONNECTED':'CHECKING'}/></div><div className="chartWrap"><InteractiveChart key={selection.provider+':'+selection.symbol+':'+interval} candles={data?.candles||[]} forecast={chartForecast} livePrice={displayPrice}/></div><div className="chartLegend"><span>{meta.referenceValueOnly?'Published NAV/reference values are genuine; the flat display is not real OHLC or traded volume.':'Open, high, low and close are completed source bars. The live ticker is separate.'}</span><span>{data?.provenance?.provider||'Source pending'} · no invented candles</span></div>
+    <MarketIndicatorPanels candles={data?.candles||[]} interval={meta.interval||interval} provider={selection.provider}/>
     <section className="candleHistory" aria-label="Published candle history">
      <div className="candleHistoryHead">
       <div><h3>Observed price history</h3><p>Source timestamps are shown in your device timezone. Rows are published candles, not projections. A missing slot is never filled with a fabricated candle.</p></div>

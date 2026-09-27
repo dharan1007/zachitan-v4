@@ -5,6 +5,7 @@ import Score from './Score';
 import SourceStatus from './SourceStatus';
 import AssetSearch from './AssetSearch';
 import {smart,pct,signedPct,date,num} from './Format';
+import {LIVE_LEDGER_KEY,issueAndSettleLedger,ledgerMetrics} from '@/lib/live-ledger.mjs';
 
 const GROUPS={
  'Crypto':[['BTC-USD','Bitcoin / USD','coinbase']],
@@ -31,12 +32,25 @@ export default function MarketLab(){
  const [data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[query,setQuery]=useState('BTC-USD');
  const [options,setOptions]=useState(null),[optionsLoading,setOptionsLoading]=useState(false),[streamPrice,setStreamPrice]=useState(null),[streamTime,setStreamTime]=useState(null);
  const [orderFlow,setOrderFlow]=useState(null),[orderFlowLoading,setOrderFlowLoading]=useState(false);
+ const [localLedger,setLocalLedger]=useState([]),[ledgerStatus,setLedgerStatus]=useState('LOCAL_ONLY');
  const inFlight=useRef(false),requestKey=useRef(null),abortRef=useRef(null),requestSeq=useRef(0);
  const isDailyOnly=selection.provider==='amfi'||selection.provider==='ecb'||selection.assetClass==='mutual_fund';
 
  useEffect(()=>{try{const q=new URLSearchParams(window.location.search),symbol=q.get('symbol'),provider=q.get('provider'),name=q.get('name'),assetClass=q.get('assetClass');if(symbol&&provider){setSelection({symbol,provider,name:name||symbol,assetClass:assetClass||'market',exchange:''});setQuery(symbol)}}catch{}},[]);
  useEffect(()=>{try{const a=JSON.parse(localStorage.getItem('zachitan.watchlist.v4')||'[]');setSaved(a.some(x=>x.symbol===selection.symbol&&x.provider===selection.provider))}catch{setSaved(false)}},[selection.symbol,selection.provider]);
  useEffect(()=>setOrderFlow(null),[selection.provider,selection.symbol]);
+ // Automatic as-issued issuance and settlement. This reuses responses already
+ // fetched for the visible market page, with zero additional server calls.
+ useEffect(()=>{
+  if(!data?.nextBar||data?.provider!==selection.provider||data?.symbol!==selection.symbol||data?.meta?.interval!==interval)return;
+  try{
+   const before=JSON.parse(localStorage.getItem(LIVE_LEDGER_KEY)||'[]');
+   const after=issueAndSettleLedger(before,data);
+   if(JSON.stringify(after)!==JSON.stringify(before))localStorage.setItem(LIVE_LEDGER_KEY,JSON.stringify(after));
+   setLocalLedger(after);setLedgerStatus('LOCAL_ONLY');
+  }catch{setLedgerStatus('STORAGE_UNAVAILABLE');setLocalLedger([])}
+ },[data,selection.provider,selection.symbol,interval]);
+ const measuredLedger=useMemo(()=>ledgerMetrics(localLedger,selection.provider,selection.symbol,interval),[localLedger,selection.provider,selection.symbol,interval]);
 
  const load=useCallback(async({quiet=false}={})=>{
   const url=buildUrl(selection,interval,range,horizon);
@@ -105,13 +119,34 @@ export default function MarketLab(){
     <div className="grid3" style={{marginTop:18}}><div className="metric"><span>Market session</span><b>{data?.session?.state||'—'}</b><small>{data?.session?.transport||'source status pending'}</small></div><div className="metric"><span>Forecast status</span><b>{titleCase(forecastState)}</b><small>{f?.abstainReason||skillState}</small></div><div className="metric"><span>Data integrity</span><b>{integrityIssues===0?'CLEAN':`${integrityIssues} repaired`}</b><small>{integrity.duplicatesRemoved||0} duplicate · {integrity.invalidRowsRemoved||0} invalid · {integrity.outOfOrderPairs||0} order</small></div></div>
    </div>
 
-   <div className="card chartPanel"><div className="chartToolbar"><div><b style={{fontSize:13}}>{meta.referenceValueOnly?'Published reference values':'Observed market data'}</b><div className="muted" style={{fontSize:10,marginTop:2}}>{publishable?'Validated forecast overlay is enabled.':'Forecast overlay is withheld until publication gates pass.'} Drag to pan · wheel/pinch to zoom</div></div><SourceStatus provider={data?.provenance?.provider||selection.provider} state={data?'CONNECTED':'CHECKING'}/></div><div className="chartWrap"><InteractiveChart candles={data?.candles||[]} forecast={chartForecast} livePrice={displayPrice}/></div><div className="chartLegend"><span>{meta.referenceValueOnly?'The published NAV/reference values are genuine, but the flat OHLC chart is a visualization proxy. No actual opens, highs, lows or traded volumes were reported.':'Observed OHLC comes from the named provider. Numeric forecast paths appear only after publication gates pass.'}</span><span>{data?.provenance?.provider||'Source pending'} · synthetic: false</span></div></div>
+   <div className="card chartPanel"><div className="chartToolbar"><div><b style={{fontSize:13}}>{meta.referenceValueOnly?'Published reference values':'Observed market data'}</b><div className="muted" style={{fontSize:10,marginTop:2}}>{publishable?'Validated forecast overlay is enabled.':'Forecast overlay is withheld until publication gates pass.'} Drag to pan · wheel or +/− to zoom</div></div><SourceStatus provider={data?.provenance?.provider||selection.provider} state={data?'CONNECTED':'CHECKING'}/></div><div className="chartWrap"><InteractiveChart key={selection.provider+':'+selection.symbol+':'+interval} candles={data?.candles||[]} forecast={chartForecast} livePrice={displayPrice}/></div><div className="chartLegend"><span>{meta.referenceValueOnly?'The published NAV/reference values are genuine, but the flat OHLC chart is a visualization proxy. No actual opens, highs, lows or traded volumes were reported.':'Observed OHLC comes from the named provider. Numeric forecast paths appear only after publication gates pass.'}</span><span>{data?.provenance?.provider||'Source pending'} · synthetic: false</span></div></div>
 
    <div className="forecastPanel">
     <div className="card forecastHero"><p className="eyebrow">Forecast decision</p>{f?.available?<>{publishable?<><div className="forecastCenter">{smart(f.center)}</div><div className="muted" style={{fontSize:12}}>{horizon} observations ahead · current {smart(f.current)} · center change {signedPct(f.center/f.current-1)}</div></>:<><div className="forecastCenter" style={{fontSize:28}}>TARGET WITHHELD</div><div className="muted" style={{fontSize:12}}>{f.abstainReason||'The forecast is research-only because production publication gates are not satisfied.'}</div></>}<div className="notice" style={{marginTop:12}}><b>{skillState}</b><div style={{marginTop:4,fontSize:11}}>Decision state: {titleCase(forecastState)} · model: {titleCase(f.modelStatus)}{f?.regime?.elevated?` · regime move ${pct(f.regime.absoluteMove)}`:''}</div></div><div className="rangeList">{[50,80,90].map(k=><div className="rangeRow" key={k}><span>{k}%</span><b>{f.ranges?.[k]?`${smart(f.ranges[k][0])} — ${smart(f.ranges[k][1])}`:'Withheld'}</b><small>{f.ranges?.[k]?'historical empirical uncertainty; not a point target':'insufficient dependence-adjusted evidence'}</small></div>)}</div></>:<div className="notice">{f?.reason||'Forecast unavailable for the current history.'}</div>}</div>
     <div className="card pad"><Score value={f?.evidenceScore} title="Evidence score" copy="Similarity evidence after concentration and temporal-dependence penalties."/><div className="divider"/><Score value={f?.calibrationScore} title="Calibration score" copy="Walk-forward error skill, probability skill and interval coverage. N/A means it was not measured."/><div className="divider"/><div className="grid2"><div className="metric"><span>P(above current)</span><b>{f?.available?pct(f?.direction?.up):'—'}</b></div><div className="metric"><span>P(below current)</span><b>{f?.available?pct(f?.direction?.down):'—'}</b></div><div className="metric"><span>Dependence-adjusted N</span><b>{num(f?.effectiveN,1)}</b></div><div className="metric"><span>Interactive validation</span><b>{v?.checks||'—'}</b><small>up to {data?.compute?.validationOriginsMax||36} origins</small></div></div></div>
    </div>
 
+
+   <section className="card pad" id="live-tracker" aria-label="Observed live forecast ledger">
+    <div className="sectionHead" style={{marginBottom:12}}><div><p className="eyebrow">Real issuance · automatic settlement</p><h2 style={{fontSize:23}}>Live accuracy ledger</h2></div><span className="betaBadge">{ledgerStatus==='LOCAL_ONLY'?'BROWSER LOCAL':'STORAGE UNAVAILABLE'}</span></div>
+    <p className="muted" style={{fontSize:12,lineHeight:1.6}}>Actual forecasts are recorded when this browser receives a new completed source bar. When a later completed bar becomes available, its genuine published OHLCV values settle the earlier forecast automatically. This is separate from reconstructed historical backtesting. It works without extra backend polling, a database, or user verification, but <strong>cannot issue predictions while the browser is closed</strong>. Local browser storage may be deleted, and records do not synchronize across devices.</p>
+    <div className="grid4" style={{marginTop:13}}>
+     <div className="metric"><span>Actually issued here</span><b>{measuredLedger.issued}</b></div>
+     <div className="metric"><span>Settled on published bars</span><b>{measuredLedger.settled}</b></div>
+     <div className="metric"><span>Awaiting outcome</span><b>{measuredLedger.pending}</b></div>
+     <div className="metric"><span>Mean close absolute error</span><b>{measuredLedger.meanAbsCloseErrorPct==null?'—':measuredLedger.meanAbsCloseErrorPct.toFixed(3)+'%'}</b><small>n={measuredLedger.settled}, issued on this browser</small></div>
+    </div>
+    {ledgerStatus!=='LOCAL_ONLY'?<div className="error" style={{marginTop:12}}>Browser storage is unavailable; an authentic as-issued history cannot be persisted in this session.</div>:null}
+    {measuredLedger.settled<20?<div className="notice" style={{marginTop:12}}>Insufficient as-issued outcomes for a reliable accuracy assessment. Historical reconstructions below are not counted as actual live predictions.</div>:<div className="notice" style={{marginTop:12}}>Live historical directional sample: {measuredLedger.directionChecks}; measured candle-body direction {measuredLedger.closeDirectionAccuracy==null?'insufficient':pct(measuredLedger.closeDirectionAccuracy)}. No performance guarantee.</div>}
+    <details style={{marginTop:12}}><summary style={{cursor:'pointer',fontWeight:700}}>Original predictions and subsequently observed outcomes</summary>
+     <div style={{overflowX:'auto',marginTop:10}}><table className="table"><thead><tr><th>Issued</th><th>Origin bar</th><th>Outcome bar</th><th>Original next O / H / L / C / volume</th><th>Observed next O / H / L / C / volume</th><th>Close error</th><th>State</th></tr></thead>
+      <tbody>{measuredLedger.history.map(x=><tr key={x.id}><td>{date(x.issuedAt)}</td><td>{date(x.originTime)}</td><td>{date(x.actualTime)}</td>
+       <td>{['open','high','low','close','volume'].map(k=>smart(x.predicted?.[k])).join(' / ')}</td>
+       <td>{x.status==='SETTLED'?['open','high','low','close','volume'].map(k=>smart(x.observed?.[k])).join(' / '):'Pending completed observation'}</td>
+       <td>{x.absErrorPct?.close==null?'—':x.absErrorPct.close.toFixed(3)+'%'}</td><td>{x.status}</td></tr>)}</tbody></table>
+     </div>
+    </details>
+   </section>
 
    <section className="card pad" id="accuracy-history" aria-label="Adaptive OHLCV forecast and accuracy history">
      <div className="sectionHead" style={{marginBottom:14}}>

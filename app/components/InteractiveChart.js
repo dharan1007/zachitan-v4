@@ -1,34 +1,277 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {smart} from './Format';
+import {computeChartIndicators,CHART_OVERLAYS} from '@/lib/chart-indicators.mjs';
 
-const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
-function nice(v){if(!Number.isFinite(v))return '—';const a=Math.abs(v);return smart(v,a<1?5:a<100?3:2)}
-function timeLabel(sec,span){const d=new Date(sec*1000);return span<3*86400?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'});}
+const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+const valid=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v));
+const PADDING={l:20,r:112,t:22,b:44};
+function timeLabel(sec,span){
+ const d=new Date(sec*1000);
+ return span<3*86400?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'});
+}
+
 export default function InteractiveChart({candles=[],forecast=null,livePrice=null}){
- const canvasRef=useRef(null),hostRef=useRef(null),drag=useRef(null),[size,setSize]=useState({w:1000,h:520}),[view,setView]=useState({end:null,count:125}),[cross,setCross]=useState(null);
- const series=useMemo(()=>{const c=(candles||[]).filter(x=>[x.time,x.open,x.high,x.low,x.close].every(v=>Number.isFinite(+v))).map(x=>({...x,time:+x.time,open:+x.open,high:+x.high,low:+x.low,close:+x.close}));if(c.length&&Number.isFinite(+livePrice)){const z={...c.at(-1)},p=+livePrice;z.close=p;z.high=Math.max(z.high,p);z.low=Math.min(z.low,p);c[c.length-1]=z}return c},[candles,livePrice]);
- const points=forecast?.available?(forecast.points||[]).filter(p=>Number.isFinite(+p.price)&&Number.isFinite(+p.bar)):[];
- const maxFuture=points.length?Math.max(...points.map(p=>+p.bar)):0,totalMax=Math.max(0,series.length-1+maxFuture);
- useEffect(()=>{if(series.length)setView(v=>({count:Math.min(Math.max(70,v.count||125),Math.max(70,series.length+maxFuture)),end:totalMax}))},[series.length,maxFuture,totalMax]);
- useEffect(()=>{if(!hostRef.current)return;const ro=new ResizeObserver(es=>{const r=es[0]?.contentRect;if(r)setSize({w:Math.max(320,Math.floor(r.width)),h:Math.max(300,Math.floor(r.height))})});ro.observe(hostRef.current);return()=>ro.disconnect()},[]);
- const geom=useMemo(()=>{const w=size.w,h=size.h,pad={l:14,r:78,t:16,b:30};const plotW=w-pad.l-pad.r,plotH=h-pad.t-pad.b,end=clamp(view.end??totalMax,0,totalMax),count=clamp(view.count,30,Math.max(30,series.length+maxFuture)),start=Math.max(0,end-count+1);const visC=series.map((x,i)=>({x,i})).filter(z=>z.i>=start&&z.i<=end),visP=points.map(p=>({p,i:series.length-1+p.bar})).filter(z=>z.i>=start&&z.i<=end);const ys=[];for(const z of visC)ys.push(z.x.low,z.x.high);for(const z of visP){ys.push(z.p.price);for(const k of [50,80,90])if(z.p.ranges?.[k])ys.push(...z.p.ranges[k])}if(!ys.length)ys.push(0,1);let min=Math.min(...ys),max=Math.max(...ys),span=max-min||Math.abs(max)*.01||1;min-=span*.08;max+=span*.08;span=max-min;const X=i=>pad.l+(i-start+.5)/count*plotW,Y=v=>pad.t+(max-v)/span*plotH;return{w,h,pad,plotW,plotH,start,end,count,min,max,span,X,Y,visC,visP}},[size,view,totalMax,series,points,maxFuture]);
- const draw=useCallback(()=>{const cv=canvasRef.current;if(!cv)return;const dpr=window.devicePixelRatio||1,ctx=cv.getContext('2d'),g=geom;cv.width=Math.floor(g.w*dpr);cv.height=Math.floor(g.h*dpr);cv.style.width=`${g.w}px`;cv.style.height=`${g.h}px`;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,g.w,g.h);ctx.fillStyle='#fff';ctx.fillRect(0,0,g.w,g.h);ctx.font='10px Inter, system-ui';ctx.textBaseline='middle';
-  for(let k=0;k<=5;k++){const y=g.pad.t+k*g.plotH/5,val=g.max-k*g.span/5;ctx.strokeStyle='#ecece7';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(g.pad.l,y);ctx.lineTo(g.w-g.pad.r,y);ctx.stroke();ctx.fillStyle='#777b82';ctx.fillText(nice(val),g.w-g.pad.r+8,y)}
-  const spanSec=series.length>1?(series[Math.min(series.length-1,g.end)]?.time||series.at(-1).time)-(series[Math.max(0,Math.floor(g.start))]?.time||series[0].time):0;for(let k=0;k<=6;k++){const idx=Math.round(g.start+k*g.count/6);let sec;if(idx<series.length)sec=series[idx]?.time;else if(points.length){const p=points.reduce((best,x)=>Math.abs((series.length-1+x.bar)-idx)<Math.abs((series.length-1+(best?.bar||0))-idx)?x:best,points[0]);sec=p?.time}if(!sec)continue;const x=g.X(idx);ctx.fillStyle='#85888e';ctx.textAlign='center';ctx.fillText(timeLabel(sec,spanSec),x,g.h-13);ctx.textAlign='left'}
-  if(g.visP.length){const upper=g.visP.filter(z=>z.p.ranges?.[80]),lower=[...upper].reverse();if(upper.length>1){ctx.beginPath();upper.forEach((z,i)=>{const x=g.X(z.i),y=g.Y(z.p.ranges[80][1]);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});lower.forEach(z=>ctx.lineTo(g.X(z.i),g.Y(z.p.ranges[80][0])));ctx.closePath();ctx.fillStyle='rgba(45,99,215,.09)';ctx.fill();}}
-  const cw=clamp(g.plotW/g.count*.64,2,14);for(const z of g.visC){const c=z.x,x=g.X(z.i),up=c.close>=c.open,col=up?'#148a53':'#ce483d';ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,g.Y(c.high));ctx.lineTo(x,g.Y(c.low));ctx.stroke();ctx.fillStyle=col;const y1=g.Y(c.open),y2=g.Y(c.close);ctx.fillRect(x-cw/2,Math.min(y1,y2),cw,Math.max(1,Math.abs(y2-y1)))}
-  if(g.visP.length){ctx.save();ctx.setLineDash([6,5]);ctx.lineWidth=2;ctx.strokeStyle='#2d63d7';ctx.beginPath();const lastIdx=series.length-1,last=series.at(-1);let started=false;if(last&&lastIdx>=g.start&&lastIdx<=g.end){ctx.moveTo(g.X(lastIdx),g.Y(last.close));started=true}for(const z of g.visP){if(!started){ctx.moveTo(g.X(z.i),g.Y(z.p.price));started=true}else ctx.lineTo(g.X(z.i),g.Y(z.p.price))}ctx.stroke();ctx.restore();for(const z of g.visP){ctx.fillStyle='#2d63d7';ctx.beginPath();ctx.arc(g.X(z.i),g.Y(z.p.price),3.5,0,Math.PI*2);ctx.fill()}}
-  if(cross&&cross.x>=g.pad.l&&cross.x<=g.w-g.pad.r&&cross.y>=g.pad.t&&cross.y<=g.h-g.pad.b){ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='#9ca1a8';ctx.beginPath();ctx.moveTo(cross.x,g.pad.t);ctx.lineTo(cross.x,g.h-g.pad.b);ctx.moveTo(g.pad.l,cross.y);ctx.lineTo(g.w-g.pad.r,cross.y);ctx.stroke();ctx.restore();const v=g.max-(cross.y-g.pad.t)/g.plotH*g.span;ctx.fillStyle='#111';ctx.fillRect(g.w-g.pad.r,cross.y-9,g.pad.r,18);ctx.fillStyle='#fff';ctx.font='10px ui-monospace,monospace';ctx.fillText(nice(v),g.w-g.pad.r+5,cross.y)}
- },[geom,series,points,cross]);
- useEffect(()=>{draw()},[draw]);
- const nearest=(x)=>{const g=geom,idx=clamp(Math.floor(g.start+(x-g.pad.l)/g.plotW*g.count),0,totalMax);if(idx<series.length)return{kind:'observed',idx,row:series[idx]};const z=points.reduce((b,p)=>Math.abs(series.length-1+p.bar-idx)<Math.abs(series.length-1+(b?.bar||0)-idx)?p:b,points[0]);return z?{kind:'forecast',idx:series.length-1+z.bar,row:z}:null};
- const pointerMove=e=>{const r=canvasRef.current.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(drag.current){const dx=x-drag.current.x,bars=Math.round(-dx/(geom.plotW/geom.count));if(Math.abs(bars)>=1){setView(v=>({...v,end:clamp((drag.current.end??totalMax)+bars,v.count-1,totalMax)}))}return}setCross({x,y,near:nearest(x)})};
- const wheel=e=>{e.preventDefault();const dir=e.deltaY>0?1:-1;setView(v=>{const next=clamp(Math.round(v.count*(dir>0?1.14:.86)),30,Math.max(30,series.length+maxFuture));return{...v,count:next,end:clamp(v.end??totalMax,next-1,totalMax)}})};
- const fit=()=>setView({count:Math.min(Math.max(90,series.length+maxFuture),Math.max(90,series.length+maxFuture)),end:totalMax}),latest=()=>setView(v=>({...v,end:totalMax,count:Math.min(v.count,Math.max(30,series.length+maxFuture))}));
- return <div ref={hostRef} style={{height:'100%',width:'100%',position:'relative',userSelect:'none'}}>
-  <canvas ref={canvasRef} style={{display:'block',cursor:drag.current?'grabbing':'crosshair'}} onPointerDown={e=>{e.currentTarget.setPointerCapture?.(e.pointerId);const r=e.currentTarget.getBoundingClientRect();drag.current={x:e.clientX-r.left,end:view.end??totalMax}}} onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}} onPointerLeave={()=>{if(!drag.current)setCross(null)}} onPointerMove={pointerMove} onWheel={wheel}/>
-  {cross?.near&&<div style={{position:'absolute',left:10,top:10,zIndex:4,padding:'7px 9px',border:'1px solid #e2e2dd',borderRadius:9,background:'rgba(255,255,255,.94)',fontSize:10,color:'#555',pointerEvents:'none'}}>{cross.near.kind==='observed'?<>O {nice(cross.near.row.open)} · H {nice(cross.near.row.high)} · L {nice(cross.near.row.low)} · C {nice(cross.near.row.close)}</>:<>Forecast {nice(cross.near.row.price)} · P(up) {Math.round((cross.near.row.pUp||0)*100)}%</>}</div>}
-  <div style={{position:'absolute',right:10,top:10,zIndex:4,display:'flex',gap:6}}><button className="btn" onClick={fit}>Fit</button><button className="btn" onClick={latest}>Latest</button></div>
- </div>
+ const canvasRef=useRef(null),hostRef=useRef(null),dragRef=useRef(null),totalRef=useRef(0);
+ const [size,setSize]=useState({w:800,h:510});
+ const [view,setView]=useState({end:null,count:125});
+ const [cross,setCross]=useState(null);
+ const [selectedIndicators,setSelectedIndicators]=useState([]);
+ // The live quote is never substituted into a completed historical OHLC candle.
+ const series=useMemo(()=>candles.filter(row=>
+  [row.time,row.open,row.high,row.low,row.close].every(valid)&&row.time>0&&row.low>0&&
+  row.low<=Math.min(row.open,row.close)&&row.high>=Math.max(row.open,row.close)
+ ).map(row=>({...row,time:Number(row.time),open:Number(row.open),high:Number(row.high),
+  low:Number(row.low),close:Number(row.close)})),[candles]);
+ const indicatorSeries=useMemo(()=>computeChartIndicators(series),[series]);
+ const points=useMemo(()=>forecast?.available?(forecast.points||[]).filter(p=>
+  valid(p.price)&&Number(p.price)>0&&Number.isFinite(Number(p.bar))&&Number(p.bar)>0
+ ):[],[forecast]);
+ const maxFuture=points.length?Math.max(...points.map(p=>Number(p.bar))):0;
+ const totalMax=Math.max(0,series.length-1+maxFuture);
+ const currentLive=valid(livePrice)&&Number(livePrice)>0?Number(livePrice):null;
+
+ // Follow new observations only if the user was already looking at the latest bar.
+ // Do not reset zoom/pan on WebSocket price ticks, price revisions, or every fetch.
+ useEffect(()=>{
+  setView(previous=>{
+   const previousTotal=totalRef.current;
+   const follow=previous.end===null||previous.end>=previousTotal-1;
+   totalRef.current=totalMax;
+   return {...previous,end:follow?totalMax:clamp(previous.end,0,totalMax)};
+  });
+ },[totalMax]);
+
+ useEffect(()=>{
+  const host=hostRef.current;
+  if(!host)return;
+  const measure=()=>{
+   const r=host.getBoundingClientRect();
+   setSize(old=>{
+    const w=Math.max(240,Math.floor(r.width)),h=Math.max(290,Math.floor(r.height));
+    return old.w===w&&old.h===h?old:{w,h};
+   });
+  };
+  measure();
+  const ro=typeof ResizeObserver==='undefined'?null:new ResizeObserver(measure);
+  if(ro)ro.observe(host);
+  else window.addEventListener('resize',measure);
+  return()=>{ro?.disconnect();if(!ro)window.removeEventListener('resize',measure)};
+ },[]);
+
+ const geom=useMemo(()=>{
+  const w=size.w,h=size.h,pad=PADDING;
+  const plotW=Math.max(100,w-pad.l-pad.r),plotH=Math.max(100,h-pad.t-pad.b);
+  const capacity=Math.max(1,series.length+maxFuture);
+  const count=clamp(view.count||125,Math.min(18,capacity),capacity);
+  const end=clamp(view.end??totalMax,0,totalMax);
+  const start=Math.max(0,end-count+1);
+  const visC=[];
+  for(let i=Math.max(0,Math.floor(start));i<series.length&&i<=end;i++)visC.push({row:series[i],i});
+  const visP=points.map(p=>({p,i:series.length-1+Number(p.bar)})).filter(z=>z.i>=start&&z.i<=end);
+  const ys=[];
+  for(const z of visC)ys.push(z.row.low,z.row.high);
+  for(const id of selectedIndicators){const values=indicatorSeries[id];if(Array.isArray(values))for(const z of visC)if(valid(values[z.i]))ys.push(Number(values[z.i]));}
+  for(const z of visP){ys.push(Number(z.p.price));for(const k of [50,80,90])if(Array.isArray(z.p.ranges?.[k]))ys.push(...z.p.ranges[k].filter(valid).map(Number))}
+  // Separate quote marker from source candles without allowing an extreme ticker
+  // to distort the entire historical scale.
+  if(!ys.length)ys.push(0,1);
+  let min=Math.min(...ys),max=Math.max(...ys);
+  let span=max-min||Math.abs(max)*.001||1;
+  min-=span*.08;max+=span*.08;span=max-min;
+  const X=i=>pad.l+(i-start+.5)/count*plotW;
+  const Y=value=>pad.t+(max-value)/span*plotH;
+  return {w,h,pad,plotW,plotH,start,end,count,min,max,span,X,Y,visC,visP};
+ },[size,view,series,points,maxFuture,totalMax,indicatorSeries,selectedIndicators]);
+
+ const nearest=useCallback(x=>{
+  if(!series.length)return null;
+  const idx=clamp(Math.floor(geom.start+(x-geom.pad.l)/geom.plotW*geom.count),0,totalMax);
+  if(idx<series.length)return {kind:'observed',row:series[idx],idx};
+  const p=points.reduce((best,p)=>!best||Math.abs(series.length-1+p.bar-idx)<Math.abs(series.length-1+best.bar-idx)?p:best,null);
+  return p?{kind:'forecast',row:p,idx:series.length-1+p.bar}:null;
+ },[geom,series,points,totalMax]);
+
+ const draw=useCallback(()=>{
+  const canvas=canvasRef.current,ctx=canvas?.getContext('2d');
+  if(!ctx)return;
+  const g=geom,dpr=Math.min(2,window.devicePixelRatio||1);
+  const targetW=Math.floor(g.w*dpr),targetH=Math.floor(g.h*dpr);
+  if(canvas.width!==targetW||canvas.height!==targetH){canvas.width=targetW;canvas.height=targetH}
+  canvas.style.width=g.w+'px';canvas.style.height=g.h+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,g.w,g.h);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,g.w,g.h);
+  ctx.font='13px system-ui,sans-serif';ctx.textBaseline='middle';
+  for(let k=0;k<=5;k++){
+   const y=g.pad.t+k*g.plotH/5,value=g.max-k*g.span/5;
+   ctx.strokeStyle='#ebeee9';ctx.lineWidth=1;ctx.beginPath();
+   ctx.moveTo(g.pad.l,y);ctx.lineTo(g.w-g.pad.r,y);ctx.stroke();
+   ctx.fillStyle='#59616b';ctx.textAlign='left';ctx.fillText(smart(value),g.w-g.pad.r+6,y);
+  }
+  if(g.visC.length>0){
+   const first=g.visC[0].row.time,last=g.visC.at(-1).row.time,span=last-first;
+   ctx.textAlign='center';ctx.fillStyle='#59616b';
+   for(let k=0;k<=5;k++){
+    const index=Math.round(g.start+(g.count-1)*k/5);
+    const row=series[index];const forecastPoint=g.visP.find(z=>z.i===index)?.p;
+    const time=row?.time??forecastPoint?.time;
+    if(valid(time))ctx.fillText(timeLabel(time,span),clamp(g.X(index),40,g.w-40),g.h-13);
+   }
+  }
+  if(g.visP.length>1){
+   const envelope=g.visP.filter(z=>Array.isArray(z.p.ranges?.[80])&&z.p.ranges[80].every(valid));
+   if(envelope.length>1){
+    ctx.beginPath();
+    envelope.forEach((z,i)=>i?ctx.lineTo(g.X(z.i),g.Y(z.p.ranges[80][1])):ctx.moveTo(g.X(z.i),g.Y(z.p.ranges[80][1])));
+    [...envelope].reverse().forEach(z=>ctx.lineTo(g.X(z.i),g.Y(z.p.ranges[80][0])));
+    ctx.closePath();ctx.fillStyle='rgba(46,96,200,.09)';ctx.fill();
+   }
+  }
+  // Overlays use precisely the same completed-candle indices as the price chart.
+  // Missing periods are left blank; no interpolated values are manufactured.
+  for(const overlay of CHART_OVERLAYS){
+   if(!selectedIndicators.includes(overlay.id))continue;
+   const values=indicatorSeries[overlay.id];
+   if(!Array.isArray(values))continue;
+   ctx.save();ctx.strokeStyle=overlay.color;ctx.lineWidth=1.9;ctx.beginPath();
+   let active=false;
+   for(const {i} of g.visC){
+    const v=values[i];
+    if(!valid(v)){active=false;continue;}
+    if(!active){ctx.moveTo(g.X(i),g.Y(Number(v)));active=true;}
+    else ctx.lineTo(g.X(i),g.Y(Number(v)));
+   }
+   ctx.stroke();ctx.restore();
+  }
+  const candleWidth=clamp(g.plotW/g.count*.62,1.5,13);
+  for(const {row,i} of g.visC){
+   const x=g.X(i),positive=row.close>=row.open;
+   ctx.strokeStyle=positive?'#147d58':'#cb4a45';
+   ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(x,g.Y(row.high));ctx.lineTo(x,g.Y(row.low));ctx.stroke();
+   const top=g.Y(Math.max(row.open,row.close)),bottom=g.Y(Math.min(row.open,row.close));
+   ctx.fillRect(x-candleWidth/2,top,candleWidth,Math.max(1,bottom-top));
+  }
+  if(g.visP.length){
+   ctx.save();ctx.strokeStyle='#2860d2';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
+   const anchor=series.length-1;
+   const visibleAnchor=series.length&&anchor>=g.start&&anchor<=g.end;
+   if(visibleAnchor)ctx.moveTo(g.X(anchor),g.Y(series.at(-1).close));
+   g.visP.forEach((z,i)=>i||visibleAnchor?ctx.lineTo(g.X(z.i),g.Y(z.p.price)):ctx.moveTo(g.X(z.i),g.Y(z.p.price)));
+   ctx.stroke();ctx.restore();
+   for(const z of g.visP){
+    ctx.fillStyle='#2860d2';ctx.beginPath();ctx.arc(g.X(z.i),g.Y(z.p.price),3,0,Math.PI*2);ctx.fill();
+   }
+  }
+  // The current ticker is an independent, labelled quote line, never an
+  // invented OHLC update and never a historical training observation.
+  if(currentLive!==null&&currentLive>=g.min&&currentLive<=g.max){
+   const y=g.Y(currentLive);ctx.save();ctx.strokeStyle='#ab6f14';ctx.lineWidth=1;
+   ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(g.pad.l,y);ctx.lineTo(g.w-g.pad.r,y);ctx.stroke();ctx.restore();
+   ctx.fillStyle='#fef1d4';ctx.fillRect(g.w-g.pad.r,y-10,g.pad.r,20);
+   ctx.fillStyle='#725016';ctx.textAlign='left';ctx.font='12px system-ui';
+   ctx.fillText(smart(currentLive),g.w-g.pad.r+6,y);
+  }
+  if(cross&&cross.x>=g.pad.l&&cross.x<=g.w-g.pad.r&&cross.y>=g.pad.t&&cross.y<=g.h-g.pad.b){
+   ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='#8b939e';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(cross.x,g.pad.t);ctx.lineTo(cross.x,g.h-g.pad.b);
+   ctx.moveTo(g.pad.l,cross.y);ctx.lineTo(g.w-g.pad.r,cross.y);ctx.stroke();ctx.restore();
+  }
+ },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators]);
+
+ useEffect(()=>{
+  let frame=requestAnimationFrame(draw);
+  return()=>cancelAnimationFrame(frame);
+ },[draw]);
+
+ const zoom=useCallback(direction=>{
+  const capacity=Math.max(1,series.length+maxFuture);
+  setView(v=>{
+   const minCount=Math.min(18,capacity),maxCount=capacity;
+   const next=clamp(Math.round(v.count*(direction>0?1.15:.85)),minCount,maxCount);
+   return {...v,count:next,end:clamp(v.end??totalMax,Math.min(next-1,totalMax),totalMax)};
+  });
+ },[series.length,maxFuture,totalMax]);
+
+ // Explicit passive:false fixes the React delegated onWheel/preventDefault
+ // warning while preserving intentional chart zoom without page-scroll conflict.
+ const zoomRef=useRef(zoom);
+ useEffect(()=>{zoomRef.current=zoom},[zoom]);
+ useEffect(()=>{
+  const node=canvasRef.current;
+  if(!node)return;
+  const onWheel=e=>{
+   if(!e.cancelable)return;
+   e.preventDefault();
+   zoomRef.current(e.deltaY>0?1:-1);
+  };
+  node.addEventListener('wheel',onWheel,{passive:false});
+  return()=>node.removeEventListener('wheel',onWheel);
+ },[]);
+
+ const onPointerDown=e=>{
+  if(e.pointerType==='touch')return;
+  const rect=e.currentTarget.getBoundingClientRect();
+  dragRef.current={pointerId:e.pointerId,x:e.clientX-rect.left,end:view.end??totalMax};
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+ };
+ const onPointerMove=e=>{
+  const rect=e.currentTarget.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top;
+  if(dragRef.current){
+   const drag=dragRef.current;
+   const bars=Math.round(-(x-drag.x)/(geom.plotW/geom.count));
+   const minEnd=Math.min(Math.max(0,geom.count-1),totalMax);
+   setView(v=>({...v,end:clamp(drag.end+bars,minEnd,totalMax)}));
+   return;
+  }
+  setCross({x,y,near:nearest(x)});
+ };
+ const stopDrag=e=>{
+  if(dragRef.current&&e.currentTarget.hasPointerCapture?.(dragRef.current.pointerId)){
+   e.currentTarget.releasePointerCapture?.(dragRef.current.pointerId);
+  }
+  dragRef.current=null;
+ };
+ const fit=()=>setView({count:Math.max(1,series.length+maxFuture),end:totalMax});
+ const latest=()=>setView(v=>({...v,end:totalMax}));
+ const tooltip=cross?.near;
+ const inspected=tooltip?.kind==='observed'?tooltip.row:series.at(-1);
+ return <div ref={hostRef} style={{height:'100%',width:'100%',minWidth:0,position:'relative',userSelect:'none'}}>
+  <canvas ref={canvasRef} aria-label="Historical candlestick chart, independently labelled live quote and validated forecast"
+   style={{display:'block',width:'100%',height:'100%',touchAction:'pan-y',cursor:'crosshair'}}
+   onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={stopDrag}
+   onPointerCancel={stopDrag} onPointerLeave={()=>{if(!dragRef.current)setCross(null)}}/>
+  <div className="chartIndicatorMenu">
+   <details><summary className="btn">Indicators ({selectedIndicators.length})</summary>
+    <div className="indicatorMenuList">
+     <p>Choose overlays. They use published completed candles only.</p>
+     {CHART_OVERLAYS.map(option=><label key={option.id}><input type="checkbox" disabled={!indicatorSeries[option.id]?.some(valid)} checked={selectedIndicators.includes(option.id)}
+      onChange={e=>{const checked=e.currentTarget.checked;setSelectedIndicators(old=>checked?[...old.filter(x=>x!==option.id),option.id]:old.filter(x=>x!==option.id));}}/>
+      <span style={{display:'inline-block',width:13,height:3,background:option.color}}/>{option.label}{!indicatorSeries[option.id]?.some(valid)?' · expand history to enable':''}</label>)}
+    </div>
+   </details>
+  </div>
+  {(tooltip||inspected)&&<div className="marketChartReadout">
+   {tooltip?.kind!=='forecast'?<>
+    <b>{tooltip?'Observed':'Latest completed bar'} · {new Date(inspected.time*1000).toLocaleString()}</b>
+    <div className="chartOHLC">
+     <span>Open <strong>{smart(inspected.open)}</strong></span>
+     <span>High <strong>{smart(inspected.high)}</strong></span>
+     <span>Low <strong>{smart(inspected.low)}</strong></span>
+     <span>Close <strong>{smart(inspected.close)}</strong></span>
+     <span>Traded volume <strong>{smart(inspected.volume)}</strong></span>
+    </div>
+   </>:<><b>Forecast checkpoint</b><div>Projected price {smart(tooltip.row.price)} · Probability of rising {valid(tooltip.row.pUp)?Math.round(tooltip.row.pUp*100)+'%':'unavailable'}</div></>}
+  </div>}
+  <div style={{position:'absolute',right:10,top:9,zIndex:4,display:'flex',gap:5}}>
+   <button type="button" className="btn" onClick={()=>zoom(-1)} aria-label="Zoom in chart">+</button>
+   <button type="button" className="btn" onClick={()=>zoom(1)} aria-label="Zoom out chart">−</button>
+   <button type="button" className="btn" onClick={fit}>Fit</button>
+   <button type="button" className="btn" onClick={latest}>Latest</button>
+  </div>
+  <div style={{position:'absolute',left:12,bottom:32,fontSize:10,color:'#5e6773',pointerEvents:'none'}}>
+   Published candles · quote separate · indicators use past data · drag to pan · wheel to zoom
+  </div>
+ </div>;
 }

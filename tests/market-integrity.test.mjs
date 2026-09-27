@@ -19,6 +19,15 @@ test('candle normalization sorts, de-duplicates, and rejects structurally invali
   assert.ok(['CLEAN', 'DEGRADED', 'CRITICAL'].includes(out.diagnostics.status));
 });
 
+test('missing volume is retained as unavailable, never a fabricated zero', () => {
+  const input = [
+    { time: 100, open: 100, high: 101, low: 99, close: 100, volume: null },
+    { time: 200, open: 100, high: 101, low: 99, close: 100, volume: 0 },
+    { time: 300, open: 100, high: 101, low: 99, close: 100, volume: 42 },
+  ];
+  assert.deepEqual(normalizeCandles(input).candles.map(x => x.volume), [null, 0, 42]);
+});
+
 test('integrity diagnostics mark heavily corrupted input critical', () => {
   const raw = [];
   for (let i = 1; i <= 20; i++) raw.push({ time: i * 60, open: 100, high: 101, low: 99, close: 100, volume: 10 });
@@ -40,12 +49,12 @@ test('Yahoo non-regular sessions stop forecasts and background polling', () => {
   assert.ok(open.autoRefreshMs >= 60_000);
 });
 
-test('Coinbase remains forecastable but does not require server polling when websocket streaming is available', () => {
+test('Coinbase price uses websocket while prediction refresh stays bounded to the visible page', () => {
   const policy = marketSessionPolicy({ provider: 'coinbase', meta: { marketState: '24/7 live' }, interval: '5m' });
   assert.equal(policy.forecastAllowed, true);
   assert.equal(policy.state, 'OPEN');
-  assert.equal(policy.autoRefreshMs, null);
-  assert.equal(policy.transport, 'websocket-live-price');
+  assert.equal(policy.autoRefreshMs, 300_000);
+  assert.equal(policy.transport, 'websocket-live-price-plus-bounded-http-snapshot');
 });
 
 test('reference sources are explicit publication-cadence data and never background-polled', () => {
@@ -57,7 +66,7 @@ test('reference sources are explicit publication-cadence data and never backgrou
   }
 });
 
-test('session gate withholds numeric target while retaining uncertainty evidence', () => {
+test('session gate withholds all numeric points and bands while retaining sample metadata', () => {
   const forecast = {
     available: true,
     current: 100,
@@ -71,7 +80,8 @@ test('session gate withholds numeric target while retaining uncertainty evidence
   assert.equal(gated.decisionState, 'ABSTAIN');
   assert.equal(gated.center, null);
   assert.equal(gated.points[0].price, null);
-  assert.deepEqual(gated.ranges[80], [90, 110]);
+  assert.equal(gated.ranges[80], null);
+  assert.equal(gated.points[0].ranges[80], null);
   assert.match(gated.abstainReason, /closed|session/i);
 });
 

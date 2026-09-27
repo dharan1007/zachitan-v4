@@ -95,23 +95,27 @@ test('forecast emits ordered checkpoints and dependence-adjusted evidence', () =
   for (let i = 1; i < f.points.length; i++) assert.ok(f.points[i].bar > f.points[i - 1].bar);
 });
 
-test('forecast exposes ensemble diagnostics while keeping empirical uncertainty', () => {
+test('forecast exposes ensemble diagnostics without leaking unqualified numeric intervals', () => {
   const f = forecast(series(), 12);
   assert.equal(f.available, true);
   assert.equal(f.pointModel, 'adaptive-ensemble-v1');
   assert.ok(f.ensemble?.available);
   assert.ok(Number.isFinite(f.ensemble.return));
-  assert.ok(f.ranges[50][0] <= f.ranges[50][1]);
+  assert.equal(f.decisionState, 'RESEARCH_ONLY');
+  assert.equal(f.ranges[50], null);
 });
 
-test('forecast probability and interval bounds are valid', () => {
+test('forecast probability bounds are valid and numeric intervals respect publication state', () => {
   const f = forecast(series(), 12);
   assert.ok(f.evidenceScore >= 0 && f.evidenceScore <= 100);
   assert.equal(f.calibrationScore, null);
   assert.ok(f.direction.up >= 0 && f.direction.up <= 1);
   assert.ok(f.direction.down >= 0 && f.direction.down <= 1);
   assert.ok(Math.abs(f.direction.up + f.direction.down - 1) < 1e-9);
-  for (const k of [50, 80, 90]) assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
+  for (const k of [50, 80, 90]) {
+    if (f.decisionState === 'PUBLISHABLE') assert.ok(f.ranges[k][0] <= f.ranges[k][1]);
+    else assert.equal(f.ranges[k], null);
+  }
 });
 
 test('research-only forecasts do not expose numeric public targets', () => {

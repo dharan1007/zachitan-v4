@@ -210,6 +210,13 @@ async function tick(env,now){
   .bind(Date.now()/1000,issued,settled,gaps,[...new Set(chosen)].length,freshSources,JSON.stringify(failures),slot).run();
  return {slot,issued,settled,gaps,freshSources,failures};
 }
+export function schedulerIsHealthy(run,now=Math.floor(Date.now()/1000)){
+ const errors=safeParse(run?.failures_json);
+ return !!(finite(run?.finished_at)&&Number(run.finished_at)>0&&
+  now>=Number(run.finished_at)&&now-Number(run.finished_at)<900&&
+  Number(run.tracked)>0&&Number(run.fresh_sources)===Number(run.tracked)&&
+  Array.isArray(errors)&&errors.length===0);
+}
 function cors(response,request,env){
  const origin=request.headers.get('Origin');
  if(origin&&origin===env.SITE_ORIGIN){
@@ -226,12 +233,12 @@ async function report(request,env){
  const history=(await env.DB.prepare(
   "SELECT id,provider,symbol,interval,model_version,origin_time,expected_time,issued_at,source_json,predicted_json,baseline_json,observed_json,settled_at,parameters_json,state FROM predictions WHERE symbol=? ORDER BY origin_time DESC LIMIT ?"
  ).bind(symbol,limit).all()).results||[];
- const last=(await env.DB.prepare('SELECT slot,started_at,finished_at,issued,settled,gaps,failures_json FROM run_slots ORDER BY slot DESC LIMIT 1').first());
+ const last=(await env.DB.prepare('SELECT slot,started_at,finished_at,issued,settled,gaps,tracked,fresh_sources,failures_json FROM run_slots ORDER BY slot DESC LIMIT 1').first());
  const computed=summarizeIssued(history);
  return json({ok:true,provider:PROVIDER,symbol,modelVersion:MODEL_VERSION,
   liveSchedulerConfigured:true,source:'Coinbase Exchange public completed 5-minute OHLCV',
   targetTiming:'Issued BEFORE target bar opens; one intervening unfinished bar is skipped. Two source-bar (10-minute) horizon from last completed origin.',
-  lastScheduledRun:last||null,schedulerHealthy:!!last?.finished_at&&Date.now()/1000-last.finished_at<900,
+  lastScheduledRun:last||null,schedulerHealthy:schedulerIsHealthy(last),
   stats:computed,
   scoreScope:'Most recent '+limit+' recorded issuances for this instrument; NOT lifetime accuracy.',
   // No after-the-fact edits: actual values and original issuance are different columns.
@@ -256,9 +263,9 @@ export default {
   }
   if(request.method!=='GET')return cors(json({ok:false,reason:'Read-only public endpoint'},405,'no-store'),request,env);
   if(path==='/health'){
-   const last=await env.DB.prepare('SELECT finished_at,failures_json FROM run_slots ORDER BY slot DESC LIMIT 1').first();
+   const last=await env.DB.prepare('SELECT finished_at,tracked,fresh_sources,failures_json FROM run_slots ORDER BY slot DESC LIMIT 1').first();
    return cors(json({ok:true,schedulerConfigured:true,
-    actuallyRunning:!!last?.finished_at&&Date.now()/1000-last.finished_at<900,
+    actuallyRunning:schedulerIsHealthy(last),
     lastRun:last?.finished_at??null,errors:safeParse(last?.failures_json)||[]}),request,env);
   }
   if(path==='/v1/report'){

@@ -30,22 +30,25 @@ export default function MarketLab(){
  const [saved,setSaved]=useState(false),[interval,setInterval]=useState('5m'),[range,setRange]=useState('1mo'),[horizon,setHorizon]=useState(12);
  const [data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[query,setQuery]=useState('BTC-USD');
  const [options,setOptions]=useState(null),[optionsLoading,setOptionsLoading]=useState(false),[streamPrice,setStreamPrice]=useState(null),[streamTime,setStreamTime]=useState(null);
- const inFlight=useRef(false),abortRef=useRef(null),requestSeq=useRef(0);
+ const inFlight=useRef(false),requestKey=useRef(null),abortRef=useRef(null),requestSeq=useRef(0);
  const isDailyOnly=selection.provider==='amfi'||selection.provider==='ecb'||selection.assetClass==='mutual_fund';
 
  useEffect(()=>{try{const q=new URLSearchParams(window.location.search),symbol=q.get('symbol'),provider=q.get('provider'),name=q.get('name'),assetClass=q.get('assetClass');if(symbol&&provider){setSelection({symbol,provider,name:name||symbol,assetClass:assetClass||'market',exchange:''});setQuery(symbol)}}catch{}},[]);
  useEffect(()=>{try{const a=JSON.parse(localStorage.getItem('zachitan.watchlist.v4')||'[]');setSaved(a.some(x=>x.symbol===selection.symbol&&x.provider===selection.provider))}catch{setSaved(false)}},[selection.symbol,selection.provider]);
 
  const load=useCallback(async({quiet=false}={})=>{
-  if(inFlight.current)return;
-  inFlight.current=true;
+  const url=buildUrl(selection,interval,range,horizon);
+  // Deduplicate the same poll but cancel a stale request immediately when
+  // symbol, interval, range, or horizon changes.
+  if(inFlight.current&&requestKey.current===url)return;
+  inFlight.current=true;requestKey.current=url;
   const seq=++requestSeq.current;
   abortRef.current?.abort();
   const ctrl=new AbortController();abortRef.current=ctrl;
   if(!quiet)setLoading(true);setError('');
-  try{const d=await getJson(buildUrl(selection,interval,range,horizon),ctrl.signal);if(seq===requestSeq.current)setData(d)}
+  try{const d=await getJson(url,ctrl.signal);if(seq===requestSeq.current)setData(d)}
   catch(e){if(e?.name!=='AbortError'&&seq===requestSeq.current)setError(e.message||'Market request failed')}
-  finally{if(seq===requestSeq.current&&!quiet)setLoading(false);inFlight.current=false}
+  finally{if(seq===requestSeq.current){if(!quiet)setLoading(false);inFlight.current=false;requestKey.current=null}}
  },[selection,interval,range,horizon]);
 
  useEffect(()=>{load();return()=>abortRef.current?.abort()},[load]);

@@ -22,7 +22,7 @@ AMFI NAV and ECB reference rates are published point values, not venue-observed 
 
 ## Resource constraints and execution
 
-No background worker, Vercel cron schedule, added Edge Function, or model-training daemon is introduced. Coinbase's existing WebSocket carries live price ticks; completed-bar forecasts and reconstructed accuracy refresh through an existing cached Vercel HTTP endpoint at most every five minutes while the corresponding browser page remains open and visible, or every fifteen minutes for the daily Coinbase view. Stock polling remains constrained by trading session; daily NAV/ECB sources are not polled.
+No deployed background worker, Vercel cron schedule or added Vercel Edge Function is introduced. The newly written, separately scheduled Cloudflare/D1 source project is explicitly UNDEPLOYED, has no authorized database ID or cloud connection, and must not be advertised as already collecting live evidence. Coinbase's existing WebSocket carries live price ticks; completed-bar forecasts and reconstructed accuracy refresh through an existing cached Vercel HTTP endpoint at most every five minutes while the corresponding browser page remains open and visible, or every fifteen minutes for the daily Coinbase view. Stock polling remains constrained by trading session; daily NAV/ECB sources are not polled.
 
 Identical concurrent frontend GETs coalesce; obsolete requests abort on symbol or timeframe changes. Exchange book/trades move to a separately requested optional endpoint. Existing CDN response-cache headers and the fifteen-minute in-memory analysis cache reduce repeated work. Analysis cache identity now incorporates a digest of every source OHLCV row, including corrections.
 
@@ -39,3 +39,18 @@ Reference standards and source links: Vercel Cron Jobs usage and pricing; Vercel
 ## Cross-asset screen qualification
 
 The daily cross-asset watchlist uses a fixed, transparent 20/60-bar trend and 20-bar momentum rule. Nonoverlapping completed-bar evaluations enter at the next published open and exit after five market-observation sessions. Only the final 40% chronological evaluation tail determines the historical sample gate (minimum 20 applicable signals, lower approximate Wilson win-rate bound over 50%, positive gross mean return and no detected recent hit-rate collapse). Its first 60% is never included in this reported holdout gate. This split is *not* a genuinely externally untouched, post-development test; parameter selection and cross-market screening can still create selection bias. It is not evidence of profitability after fees. Market-time, transaction costs, position execution, licensed third-party forecasts and real institutional verdicts are still unverified.
+
+
+## September 27, 2026 no-Actions correction and autonomous evidence scope
+
+A new independent development branch contains no GitHub Actions workflow invocation. Its source changes are **not** a verified production release. The last confirmed Vercel production deployment predates this work.
+
+The source-candle table now includes date, observed OHLCV, historical replay values or actually issued browser-local forecast values, signed observed-minus-predicted close difference, and classified source gaps. Crypto missing intervals are distinct from stock-market session closures. Every reconstructed row says "Historical replay"; it is not claimed as an originally issued live forecast.
+
+MACD uses properly initialized EMA after enough real observations. ATR uses Wilder smoothing. RSI, MACD, ATR and publisher-supplied volume have separate scales. The main chart uses appropriately scaled price overlays, and actual time-stamped backtest curves break across missing continuous-market candles. Future outcomes are never drawn before publisher confirmation.
+
+The browser can request up to 1,100 retrospective source-observation checks from its own Web Worker without additional Vercel analysis requests. Source histories are still bounded; a deep replay cannot recreate unavailable days, holidays, candles or unlicensed data. The baseline and projected-price errors use the same eligible observation set; arithmetic MAPE and mean absolute log-error improvement are separately labelled.
+
+The dedicated Cloudflare source implementation at infrastructure/cloudflare-evidence has a D1 schema with immutable issued-source/prediction columns, scheduled issuance, timestamped next-candle settlement, explicit unobserved data gaps and adaptation based strictly on earlier independently settled errors. **This is not deployed.** It is initially only for Coinbase BTC-USD and ETH-USD native five-minute bars and a pre-open target two source-bar intervals after the last completed origin (one in-progress interval is intentionally skipped). It is NOT the same fitted model as the V6 or browser analogue: numerical results from one must not be mixed into the other's hit rate. No other symbol or timeframe is silently advertised as autonomously verified.
+
+Deployment requires the user's authorized Cloudflare Worker/D1 account, a real created database ID, measured quota consumption, a verified clock/cron run, market-data-rights approval, and a genuine successful first settlement. Native Vercel Hobby Cron cannot produce five-minute unattended audits, and Vercel source requests still consume finite Vercel Function invocations when uncached. No unlimited-free or guaranteed-accuracy claim is supported.

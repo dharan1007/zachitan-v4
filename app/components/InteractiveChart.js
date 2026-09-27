@@ -170,7 +170,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    const y=g.Y(currentLive);ctx.save();ctx.strokeStyle='#ab6f14';ctx.lineWidth=1;
    ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(g.pad.l,y);ctx.lineTo(g.w-g.pad.r,y);ctx.stroke();ctx.restore();
    ctx.fillStyle='#fef1d4';ctx.fillRect(g.w-g.pad.r,y-10,g.pad.r,20);
-   ctx.fillStyle='#725016';ctx.textAlign='left';ctx.font='10px system-ui';
+   ctx.fillStyle='#725016';ctx.textAlign='left';ctx.font='12px system-ui';
    ctx.fillText(smart(currentLive),g.w-g.pad.r+6,y);
   }
   if(cross&&cross.x>=g.pad.l&&cross.x<=g.w-g.pad.r&&cross.y>=g.pad.t&&cross.y<=g.h-g.pad.b){
@@ -236,6 +236,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
  const fit=()=>setView({count:Math.max(1,series.length+maxFuture),end:totalMax});
  const latest=()=>setView(v=>({...v,end:totalMax}));
  const tooltip=cross?.near;
+ const inspected=tooltip?.kind==='observed'?tooltip.row:series.at(-1);
  return <div ref={hostRef} style={{height:'100%',width:'100%',minWidth:0,position:'relative',userSelect:'none'}}>
   <canvas ref={canvasRef} aria-label="Historical candlestick chart, independently labelled live quote and validated forecast"
    style={{display:'block',width:'100%',height:'100%',touchAction:'pan-y',cursor:'crosshair'}}
@@ -251,15 +252,15 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
     </div>
    </details>
   </div>
-  {tooltip&&<div className="marketChartReadout">
-   {tooltip.kind==='observed'?<>
-    <b>Observed · {new Date(tooltip.row.time*1000).toLocaleString()}</b>
+  {(tooltip||inspected)&&<div className="marketChartReadout">
+   {tooltip?.kind!=='forecast'?<>
+    <b>{tooltip?'Observed':'Latest completed bar'} · {new Date(inspected.time*1000).toLocaleString()}</b>
     <div className="chartOHLC">
-     <span>Open <strong>{smart(tooltip.row.open)}</strong></span>
-     <span>High <strong>{smart(tooltip.row.high)}</strong></span>
-     <span>Low <strong>{smart(tooltip.row.low)}</strong></span>
-     <span>Close <strong>{smart(tooltip.row.close)}</strong></span>
-     <span>Traded volume <strong>{smart(tooltip.row.volume)}</strong></span>
+     <span>Open <strong>{smart(inspected.open)}</strong></span>
+     <span>High <strong>{smart(inspected.high)}</strong></span>
+     <span>Low <strong>{smart(inspected.low)}</strong></span>
+     <span>Close <strong>{smart(inspected.close)}</strong></span>
+     <span>Traded volume <strong>{smart(inspected.volume)}</strong></span>
     </div>
    </>:<><b>Forecast checkpoint</b><div>Projected price {smart(tooltip.row.price)} · Probability of rising {valid(tooltip.row.pUp)?Math.round(tooltip.row.pUp*100)+'%':'unavailable'}</div></>}
   </div>}

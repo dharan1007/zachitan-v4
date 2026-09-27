@@ -127,6 +127,19 @@ export default function MarketLab(){
    </div>
 
 
+   <details className="card pad" id="forecast-diagnosis">
+    <summary style={{cursor:'pointer',fontWeight:750,fontSize:17}}>Why are the forecasts inaccurate? · Measured diagnostics</summary>
+    <p className="muted" style={{fontSize:12,lineHeight:1.6,margin:'13px 0'}}>These diagnostics distinguish statistically observed failures from missing inputs. An omitted factor is a potential limitation, not proof that it caused any particular price move.</p>
+    {data?.diagnostic?.measured?.length?<div className="grid2">
+     {data.diagnostic.measured.map(item=><div key={item.code} className={item.severity==='CRITICAL'?'error':'notice'}>
+      <b>{item.title}</b><p style={{fontSize:12,lineHeight:1.5,margin:'5px 0 0'}}>{item.detail} {item.samples?'n='+item.samples:''}</p>
+     </div>)}
+    </div>:<div className="notice">No measured failure finding is available from the current completed source observations. This is not evidence that a future projection is correct.</div>}
+    <details style={{marginTop:13}}><summary style={{cursor:'pointer',fontWeight:700}}>Unmeasured factors and external-source limitations</summary>
+     <div className="grid2" style={{marginTop:12}}>{(data?.diagnostic?.unmeasured||[]).map(item=><div key={item.code} className="metric"><b style={{fontSize:13}}>{item.title}</b><p style={{fontSize:12,lineHeight:1.5,margin:'6px 0 0'}}>{item.detail}</p></div>)}</div>
+    </details>
+   </details>
+
    <section className="card pad" id="live-tracker" aria-label="Observed live forecast ledger">
     <div className="sectionHead" style={{marginBottom:12}}><div><p className="eyebrow">Real issuance · automatic settlement</p><h2 style={{fontSize:23}}>Live accuracy ledger</h2></div><span className="betaBadge">{ledgerStatus==='LOCAL_ONLY'?'BROWSER LOCAL':'STORAGE UNAVAILABLE'}</span></div>
     <p className="muted" style={{fontSize:12,lineHeight:1.6}}>Actual forecasts are recorded when this browser receives a new completed source bar. When a later completed bar becomes available, its genuine published OHLCV values settle the earlier forecast automatically. This is separate from reconstructed historical backtesting. It works without extra backend polling, a database, or user verification, but <strong>cannot issue predictions while the browser is closed</strong>. Local browser storage may be deleted, and records do not synchronize across devices.</p>

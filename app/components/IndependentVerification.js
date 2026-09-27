@@ -48,10 +48,11 @@ export default function IndependentVerification({symbol='BTC-USD',interval='5m'}
     <p className="muted" style={{fontSize:13,lineHeight:1.55,margin:'2px 0 13px'}}>Source: {data.source}. Its lightweight independent model is <b>not</b> the same as the main V6 price model. The scheduler is active only when recently completed runs are verifiable. Past forecasts are preserved even when outcomes disagree with them.</p>
     <div className="grid4" style={{marginBottom:13}}>
      <div className="metric"><span>Last scheduler cycle</span><b style={{fontSize:15}}>{prettyTime(data.lastScheduledRun?.finished_at)}</b></div>
-     <div className="metric"><span>Actually settled</span><b>{data.stats?.settled??0}</b></div>
+     <div className="metric"><span>Settled in this displayed sample</span><b>{data.stats?.settled??0}</b></div>
      <div className="metric"><span>Observed close MAPE</span><b>{pctNumber(data.stats?.byField?.close?.meanAbsolutePercent)}</b><small>n={data.stats?.byField?.close?.checks??0}</small></div>
      <div className="metric"><span>Accuracy vs unchanged price</span><b>{data.stats?.byField?.close?.improvementVsBaseline==null?'Not measured':pct(data.stats.byField.close.improvementVsBaseline)}</b><small>Positive means lower log error, not a guaranteed trading return.</small></div>
     </div>
+    <p className="muted" style={{fontSize:12,margin:'0 0 11px'}}>{data.scoreScope||'Accuracy covers only the returned source records.'} Target: {data.targetTiming||'Timing not independently established.'}</p>
     <div className="evidenceReadout">
      {FIELDS.map(([key,label])=><div key={key}><span>{label} error</span><b>{pctNumber(data.stats?.byField?.[key]?.meanAbsolutePercent)}</b>
        <small>{data.stats?.byField?.[key]?.checks??0} completed outcomes</small></div>)}

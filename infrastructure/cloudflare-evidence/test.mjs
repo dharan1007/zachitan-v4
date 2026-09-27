@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {candidateForecast,adaptForecast,summarizeIssued} from './src/index.mjs';
+import {candidateForecast,adaptForecast,summarizeIssued,targetPreopen} from './src/index.mjs';
 const fixture=(close=100,volume=1000)=>({time:1700000000,open:close*.998,close,high:close*1.01,low:close*.99,volume});
 test('source-only candidate is coherent and cannot look at future candles',()=>{
  const prior=fixture(99),last=fixture(100);
@@ -51,4 +51,15 @@ test('independent accuracy calculation uses only actually settled original predi
  assert.equal(r.settled,1);
  assert.equal(r.byField.close.checks,1);
  assert.equal(r.byField.close.meanAbsolutePercent,10);
+});
+
+test('next-open forecast must be actually issued before its target candle has begun',()=>{
+ const origin={time:Date.parse('2026-09-27T11:55:00Z')/1000};
+ const now=Date.parse('2026-09-27T12:01:00Z')/1000;
+ const target=Date.parse('2026-09-27T12:05:00Z')/1000;
+ assert.equal(targetPreopen(origin,now).expectedTime,target);
+ assert.equal(targetPreopen(origin,now).canIssue,true);
+ assert.equal(targetPreopen(origin,target).canIssue,false);
+ assert.equal(targetPreopen(origin,target+1).canIssue,false);
+ assert.equal(targetPreopen(origin,origin.time+300).canIssue,false);
 });

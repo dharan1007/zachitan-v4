@@ -132,3 +132,29 @@ test('failed untouched holdout forces abstention despite positive walk-forward v
   assert.equal(f.center, null);
   assert.match(f.abstainReason || '', /holdout|deteriorated|drift/i);
 });
+
+test('publication cannot silently refit weights or calibration on later validation data', () => {
+  const frozen = {
+    ...positiveValidation,
+    probabilityCalibrationAlpha: 0.05,
+    candidateMae: { noChange: 0.012, momentum: 0.02, regime: 0.02, analogue: 0.013, ensemble: 0.011 },
+  };
+  const contaminated = {
+    ...positiveValidation,
+    probabilityCalibrationAlpha: 1,
+    candidateMae: { noChange: 0.05, momentum: 0.01, regime: 0.01, analogue: 0.04, ensemble: 0.008 },
+  };
+  const qualification = {
+    available: true, qualified: true, state: 'QUALIFIED',
+    pointSkillVsNoChange: 0.05, brierSkillVs50: 0.02,
+    drift: { detected: false },
+    trainingValidation: frozen,
+  };
+  const rows = series();
+  const observed = forecast(rows, 12, contaminated, qualification);
+  const expected = forecast(rows, 12, frozen, { ...qualification, trainingValidation: null });
+  assert.equal(observed.decisionState, 'PUBLISHABLE');
+  assert.equal(observed.center, expected.center);
+  assert.equal(observed.direction.up, expected.direction.up);
+  assert.deepEqual(observed.ranges, expected.ranges);
+});

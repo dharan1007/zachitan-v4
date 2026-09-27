@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assessHoldoutRows } from '../lib/model-qualification.mjs';
 import { forecastV6 as forecast } from '../lib/model-v6.mjs';
+import { evaluatePublicationHoldout } from '../lib/model-holdout.mjs';
+import { validateEnsemble } from '../lib/model-v5.mjs';
 
 function series(n = 1200) {
   const out = [];
@@ -109,6 +111,7 @@ test('qualified untouched holdout can unlock a validated forecast', () => {
     state: 'QUALIFIED',
     pointSkillVsNoChange: 0.05,
     brierSkillVs50: 0.02,
+    trainingValidation: positiveValidation,
     drift: { detected: false },
   };
   const f = forecast(series(), 12, positiveValidation, qualification);
@@ -157,4 +160,29 @@ test('publication cannot silently refit weights or calibration on later validati
   assert.equal(observed.center, expected.center);
   assert.equal(observed.direction.up, expected.direction.up);
   assert.deepEqual(observed.ranges, expected.ranges);
+});
+
+test('real holdout evaluator returns its actual frozen pre-holdout fit to publication', () => {
+  const rows = series(1200);
+  const validation = validateEnsemble(rows, 12, 20);
+  const qualification = evaluatePublicationHoldout(rows, 12, { minimumChecks: 8, trainingChecks: 20 });
+  assert.equal(qualification.trainingValidation?.available, true);
+  assert.deepEqual(qualification.frozenWeights, qualification.trainingValidation.finalWeights);
+  assert.equal(qualification.probabilityCalibrationAlpha, qualification.trainingValidation.probabilityCalibrationAlpha);
+  const observed = forecast(rows, 12, validation, qualification);
+  assert.equal(observed.probabilityCalibrationAlpha, qualification.trainingValidation.probabilityCalibrationAlpha);
+  assert.deepEqual(observed.ensemble.weights, qualification.frozenWeights);
+  assert.equal(observed.publicationQualification.trainingRows, qualification.trainingRows);
+});
+
+test('missing frozen fit fails closed even if externally supplied validation looks positive', () => {
+  const qualification = {
+    available: true, qualified: true, pointSkillVsNoChange: 0.07, brierSkillVs50: 0.04,
+    drift: { detected: false },
+  };
+  const result = forecast(series(), 12, positiveValidation, qualification);
+  assert.equal(result.decisionState, 'RESEARCH_ONLY');
+  assert.equal(result.center, null);
+  assert.equal(result.ranges[80], null);
+  assert.match(result.modelStatus, /frozen-training-fit-missing/);
 });

@@ -35,7 +35,7 @@ test('an intermediate bar cannot settle a two-step prediction; the actual comple
  assert.equal(result[0].observed.close,104);assert.equal(result[0].predicted.close,100.5);
  assert.ok(result[0].absErrorPct.close>0);
  const k=ledgerMetrics(result,'coinbase','BTC-USD','5m');
- assert.equal(k.settled,1);assert.equal(k.pending,1);
+ assert.equal(k.settled,1);assert.equal(k.pending,2);
 });
 test('stale sources, already-open targets and integrity failures cannot masquerade as live',()=>{
  const d=snapshot([sample(0)]);

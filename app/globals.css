@@ -98,3 +98,52 @@
 .candleHistoryFoot{margin:9px 2px 0;color:#45576b;font-size:12px;line-height:1.55}
 @media(max-width:900px){.chartWrap{height:500px}.chartIndicatorMenu{max-width:calc(100% - 130px)}.marketChartReadout{font-size:12px}.chartOHLC{gap:2px 9px}.chartOHLC strong{font-size:12px}}
 @media(max-width:620px){.chartWrap{height:470px}.chartIndicatorMenu{left:7px;top:7px}.chartIndicatorMenu summary{font-size:12px;padding:6px 9px;min-height:35px}.marketChartReadout{top:56px;left:7px;right:7px;max-width:calc(100% - 14px)}.chartHistoryScroll{max-height:400px}.candleHistoryHead h3{font-size:17px}}
+
+
+/* Zachitan measured-evidence legibility, real OHLC and oscillator panels. */
+.marketMain{min-width:0}
+.marketMain .chartPanel{width:75%;min-width:min(100%,860px);max-width:1220px;margin-left:auto;margin-right:auto}
+.marketMain .chartWrap{height:590px}
+.chartToolbar b{font-size:16px!important;color:#10263d}
+.chartToolbar .muted{color:#33495d!important;font-size:13px!important;line-height:1.45}
+.marketChartReadout{font-size:15px;box-shadow:0 5px 20px rgba(7,31,54,.15)}
+.marketChartReadout>b{font-size:15px}
+.marketChartReadout strong{font-size:16px}
+.chartLegend{font-size:13px;color:#31465c;line-height:1.5}
+.marketMain .table{font-size:13px}
+.marketMain .table th{font-size:12px;color:#223b53;font-weight:830}
+.marketMain .table td{color:#172b41}
+.marketMain .muted{color:#41556b}
+.marketMain .metric span{font-size:12px;color:#344a61}
+.marketMain .metric small{font-size:11px;color:#3d536a}
+.marketMain .metric b{color:#0d253d}
+.marketMain .notice{font-size:13px;line-height:1.6}
+.marketMain .sectionHead h2{font-size:clamp(22px,2vw,29px)}
+.marketMain .candleHistory{margin-top:18px}
+.marketMain .candleTable{min-width:1860px;font-size:14px}
+.marketMain .candleTable td{font-size:14px;color:#142b43}
+.marketMain .candleTable th{font-size:12px!important}
+.marketMain .candleTable td small{font-size:12px;color:#43576d}
+.indicatorPanels{margin-top:16px;padding:16px 12px 18px;background:#fff;border:1px solid #d9e4ec;border-radius:14px}
+.indicatorPanelsHead{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.indicatorPanelsHead h3{margin:0 0 4px;color:#10273e;font-size:20px}
+.indicatorPanelsHead p{margin:0;color:#3c536a;font-size:13px;line-height:1.5}
+.indicatorPanelOptions{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0 9px}
+.indicatorChoice{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid #c6d4e1;background:#fff;border-radius:11px;color:#253d56;font-size:13px;font-weight:700;cursor:pointer}
+.indicatorChoice.on{background:#edf4ff;border-color:#7ba9df;color:#124c83}
+.indicatorChoice input{width:17px;height:17px;accent-color:#165ca3}
+.indicatorEmpty{font-size:13px;color:#43566c;margin:13px 2px}
+.indicatorPanel{margin-top:12px;padding:12px;border:1px solid #d5e0eb;background:#fbfdff;border-radius:11px}
+.indicatorPanelTitle{display:flex;flex-wrap:wrap;gap:9px;align-items:baseline;justify-content:space-between}
+.indicatorPanelTitle h4{margin:0;color:#102a45;font-size:16px}
+.indicatorPanelTitle span{font-variant-numeric:tabular-nums;color:#334f69;font-size:13px;font-weight:750}
+.indicatorGraph{display:block;width:100%;height:auto;margin:6px 0;background:#fff;border:1px solid #e1e8ee;border-radius:9px}
+.indicatorExplanation{font-size:13px;line-height:1.55;color:#3a5067;margin:5px}
+.evidenceCard .researchStatus{font-size:12px}
+.evidenceReadout{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.evidenceReadout>div{background:#f5f8fc;border:1px solid #dbe4ed;padding:11px;border-radius:10px}
+.evidenceReadout span,.evidenceReadout small{display:block;color:#334d67;font-size:12px}
+.evidenceReadout b{display:block;color:#0e2b47;font-size:17px;margin:5px 0}
+@media(max-width:1200px){.marketMain .chartPanel{width:90%;min-width:0}.evidenceReadout{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:960px){.marketMain .chartPanel{width:100%}.marketMain .chartWrap{height:520px}}
+@media(max-width:620px){.marketMain .chartWrap{height:510px}.marketChartReadout{font-size:13px}.marketChartReadout strong{font-size:14px}.indicatorPanels{padding:11px}.indicatorPanel{padding:8px}.evidenceReadout{grid-template-columns:repeat(2,1fr)}}

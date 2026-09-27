@@ -1,0 +1,16 @@
+name = "zachitan-independent-evidence"
+main = "src/index.mjs"
+compatibility_date = "2026-09-20"
+workers_dev = true
+
+[vars]
+SITE_ORIGIN = "https://zachitan.vercel.app"
+TRACKED_SYMBOLS = "BTC-USD,ETH-USD"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "zachitan-independent-evidence"
+database_id = "REPLACE_WITH_ACTUAL_D1_DATABASE_ID"
+
+[triggers]
+crons = ["1-59/5 * * * *"]

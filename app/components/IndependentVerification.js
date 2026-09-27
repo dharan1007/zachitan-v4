@@ -6,6 +6,7 @@ const ENDPOINT=String(process.env.NEXT_PUBLIC_ZACHITAN_EVIDENCE_URL||'').trim().
 const FIELDS=[['open','Open'],['high','High'],['low','Low'],['close','Close'],['volume','Volume']];
 const prettyTime=seconds=>seconds?date(seconds):'—';
 function pctNumber(v){return v==null||!Number.isFinite(Number(v))?'—':Number(v).toFixed(2)+'%';}
+function hasSourceFailure(text){try{const issues=JSON.parse(text||'[]');return !Array.isArray(issues)||issues.length>0;}catch{return true}}
 export default function IndependentVerification({symbol='BTC-USD',interval='5m'}){
  const supported=['BTC-USD','ETH-USD'].includes(symbol)&&interval==='5m';
  const [data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(false);
@@ -57,7 +58,7 @@ export default function IndependentVerification({symbol='BTC-USD',interval='5m'}
      {FIELDS.map(([key,label])=><div key={key}><span>{label} error</span><b>{pctNumber(data.stats?.byField?.[key]?.meanAbsolutePercent)}</b>
        <small>{data.stats?.byField?.[key]?.checks??0} completed outcomes</small></div>)}
     </div>
-    {data.lastScheduledRun?.failures_json&&JSON.parse(data.lastScheduledRun.failures_json||'[]').length>0?<div className="notice" style={{marginTop:10}}>Latest scheduler cycle reported one or more publisher failures. The reported time and checked count remain unchanged until genuine observations are processed.</div>:null}
+    {data.lastScheduledRun?.failures_json&&hasSourceFailure(data.lastScheduledRun.failures_json)?<div className="notice" style={{marginTop:10}}>Latest scheduler cycle reported one or more publisher failures. The reported time and checked count remain unchanged until genuine observations are processed.</div>:null}
     {history.length? <div className="candleHistoryScroll" style={{maxHeight:360,marginTop:13}}>
      <table className="table candleTable"><thead><tr><th>Issued</th><th>Expected completed interval</th><th>Predicted next close</th><th>Observed next close</th><th>Close absolute error</th><th>Verification</th></tr></thead>
       <tbody>{history.map(row=>{

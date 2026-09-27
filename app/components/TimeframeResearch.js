@@ -42,6 +42,10 @@ export default function TimeframeResearch({selection,interval,onSelect,data}){
      </div>
      {!allowed?<p className="muted">The selected publisher does not provide this native candle interval. We do not relabel or fabricate higher-frequency observations.</p>:
       !active?<p className="muted">Not fetched. Inspect this interval to see genuine observed prices and new evaluation results, using the existing bounded market request. No background scan is started.</p>:
+      data?.meta?.referenceValueOnly?<div className="timeframeResearchFinding">
+       <strong>Published reference only: {smart(current?.close)}</strong>
+       <p>Published at {date(current?.time)} by {data?.provenance?.provider||'its reference publisher'}. This is a single NAV or reference exchange-rate observation—not an exchange-traded opening, high, low or close. No genuine traded volume, intraday candle, actionable entry or exit timing is published by this series. No OHLC forecast is displayed.</p>
+      </div>:
       <>
        <div className="timeframeResearchMetrics">
         <div><span>Last observed open</span><b>{smart(current?.open)}</b></div>

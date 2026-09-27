@@ -83,7 +83,7 @@ export default function MarketLab(){
 
  useEffect(()=>{setStreamPrice(null);setStreamTime(null);if(selection.provider!=='coinbase')return;let ws;try{ws=new WebSocket('wss://ws-feed.exchange.coinbase.com');ws.onopen=()=>ws.send(JSON.stringify({type:'subscribe',product_ids:[selection.symbol],channels:['ticker']}));ws.onmessage=e=>{try{const x=JSON.parse(e.data);if(x.type==='ticker'&&x.product_id===selection.symbol&&Number.isFinite(+x.price)){setStreamPrice(+x.price);setStreamTime(x.time||new Date().toISOString())}}catch{}}}catch{}return()=>{try{ws?.close()}catch{}}},[selection.provider,selection.symbol]);
 
- const choose=x=>{const s={symbol:x.symbol,name:x.name||x.symbol,provider:x.provider||'yahoo',assetClass:x.assetClass||'market',exchange:x.exchange||''};setData(null);setSelection(s);setQuery(s.symbol);setOptions(null);if(s.provider==='amfi'||s.provider==='ecb'||s.assetClass==='mutual_fund'){setInterval('1d');if(['1d','5d'].includes(range))setRange('2y')}else if((s.provider==='coinbase'&&interval==='1wk')||(s.provider==='yahoo'&&interval==='6h'))setInterval('1d')};
+ const choose=x=>{const s={symbol:x.symbol,name:x.name||x.symbol,provider:x.provider||'yahoo',assetClass:x.assetClass||'market',exchange:x.exchange||''};setData(null);setSelection(s);setQuery(s.symbol);setOptions(null);setStreamPrice(null);setStreamTime(null);if(s.provider==='amfi'||s.provider==='ecb'||s.assetClass==='mutual_fund'){setInterval('1d');if(['1d','5d'].includes(range))setRange('2y')}else if((s.provider==='coinbase'&&interval==='1wk')||(s.provider==='yahoo'&&interval==='6h'))setInterval('1d')};
  const loadOptions=async()=>{setOptionsLoading(true);try{setOptions(await getJson(`/api/data?action=options&symbol=${encodeURIComponent(selection.symbol)}`))}catch(e){setOptions({state:'DEGRADED',message:e.message,calls:[],puts:[]})}finally{setOptionsLoading(false)}};
  const loadOrderFlow=async()=>{setOrderFlowLoading(true);try{setOrderFlow(await getJson(`/api/data?action=microstructure&symbol=${encodeURIComponent(selection.symbol)}`))}catch(e){setOrderFlow({error:e.message||'Exchange microstructure unavailable'})}finally{setOrderFlowLoading(false)}};
  const f=data?.forecast,v=data?.validation,ind=data?.indicators,m=orderFlow?.microstructure||data?.microstructure,quote=data?.quote||{},meta=data?.meta||{};
@@ -219,11 +219,11 @@ export default function MarketLab(){
     {ledgerStatus!=='LOCAL_ONLY'?<div className="error" style={{marginTop:12}}>Browser storage is unavailable; an authentic as-issued history cannot be persisted in this session.</div>:null}
     {measuredLedger.settled<20?<div className="notice" style={{marginTop:12}}>Insufficient as-issued outcomes for a reliable accuracy assessment. Historical reconstructions below are not counted as actual live predictions.</div>:<div className="notice" style={{marginTop:12}}>Live historical directional sample: {measuredLedger.directionChecks}; measured candle-body direction {measuredLedger.closeDirectionAccuracy==null?'insufficient':pct(measuredLedger.closeDirectionAccuracy)}. No performance guarantee.</div>}
     <details style={{marginTop:12}}><summary style={{cursor:'pointer',fontWeight:700}}>Original predictions and subsequently observed outcomes</summary>
-     <div style={{overflowX:'auto',marginTop:10}}><table className="table"><thead><tr><th>Issued</th><th>Origin bar</th><th>Outcome bar</th><th>Original next O / H / L / C / volume</th><th>Observed next O / H / L / C / volume</th><th>Close error</th><th>State</th></tr></thead>
+     <div style={{overflowX:'auto',marginTop:10}}><table className="table"><thead><tr><th>Issued</th><th>Origin bar</th><th>Outcome bar</th><th>Original next O / H / L / C / volume</th><th>Observed next O / H / L / C / volume</th><th>Field errors · O / H / L / C / volume / range / body</th><th>Close forecast − actual</th><th>State</th></tr></thead>
       <tbody>{measuredLedger.history.map(x=><tr key={x.id}><td>{date(x.issuedAt)}</td><td>{date(x.originTime)}</td><td>{date(x.actualTime)}</td>
        <td>{['open','high','low','close','volume'].map(k=>smart(x.predicted?.[k])).join(' / ')}</td>
        <td>{x.status==='SETTLED'?['open','high','low','close','volume'].map(k=>smart(x.observed?.[k])).join(' / '):'Pending completed observation'}</td>
-       <td>{x.absErrorPct?.close==null?'—':x.absErrorPct.close.toFixed(3)+'%'}</td><td>{x.status}</td></tr>)}</tbody></table>
+       <td>{['open','high','low','close','volume','range','body'].map(k=>x.absErrorPct?.[k]==null?'—':metric(x.absErrorPct[k],2)+'%').join(' / ')}</td><td>{x.status==='SETTLED'&&x.predicted?.close!=null&&x.observed?.close!=null?smart(x.predicted.close-x.observed.close):'—'}</td><td>{x.status}</td></tr>)}</tbody></table>
      </div>
     </details>
    </section>
@@ -242,7 +242,7 @@ export default function MarketLab(){
        </div>
        <div style={{overflowX:'auto'}}>
          <table className="table">
-           <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Historical MAPE</th><th>Naive MAPE</th><th>Log-error skill</th><th>Adjustment</th></tr></thead>
+           <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Average error</th><th>No-change error</th><th>Improvement over no-change</th><th>Automatic adjustment</th></tr></thead>
            <tbody>{[['open','Next open'],['high','Next high'],['low','Next low'],['close','Next close'],['volume','Next traded volume'],['range','Full candle range (high − low)'],['body','Candle body (|close − open|)']].map(([field,label])=>{
              const stats=data.nextBar.accuracy?.[field]||{},band=data.nextBar.empirical80?.[field],parameter=data.nextBar.parameters?.[field]||{};
              return <tr key={field}>
@@ -252,7 +252,7 @@ export default function MarketLab(){
                <td>{stats.meanAbsPctError==null?'—':stats.meanAbsPctError.toFixed(2)+'%'}<div className="muted" style={{fontSize:10}}>n={stats.samples||0}</div></td>
                <td>{stats.baselineMeanAbsPctError==null?'—':stats.baselineMeanAbsPctError.toFixed(2)+'%'}</td>
                <td className={stats.skill>0?'positive':stats.skill<0?'negative':''}>{stats.skill==null?'—':pct(stats.skill)}</td>
-               <td><b>{parameter.weight==null?'—':pct(parameter.weight,0)} analogue</b><div className="muted" style={{fontSize:10}}>{parameter.reason||'No calibration history'}</div></td>
+               <td><b>{parameter.weight==null?'—':pct(parameter.weight,0)} historical pattern</b><div className="muted" style={{fontSize:10}}>{parameter.reason?.replace('Uncalibrated: insufficient matured errors','Not enough previous actual outcomes to adjust').replace('Baseline selected on matured errors','The earlier predictions underperformed; use previous price').replace('Chronologically adapted on matured errors','Reweighted using previously observed errors')||'No calibration history'}</div></td>
              </tr>;
            })}</tbody>
          </table>
@@ -270,12 +270,12 @@ export default function MarketLab(){
          </div>
          <div style={{overflowX:'auto'}}>
            <table className="table">
-             <thead><tr><th>Historical forecast origin</th><th>Observed next</th><th>Predicted O / H / L / C / volume</th><th>Observed O / H / L / C / volume</th><th>Close absolute error</th></tr></thead>
+             <thead><tr><th>Historical forecast origin</th><th>Observed next</th><th>Predicted O / H / L / C / volume</th><th>Observed O / H / L / C / volume</th><th>Field errors · O / H / L / C / volume / range / body</th><th>Close forecast − actual</th></tr></thead>
              <tbody>{(data.nextBar.history||[]).map((record,i)=><tr key={record.issuedAt+'-'+i}>
                <td>{date(record.issuedAt)}</td><td>{date(record.observedAt)}</td>
                <td>{['open','high','low','close','volume'].map(k=>smart(record.predicted?.[k])).join(' / ')}<div className="muted" style={{fontSize:10}}>Range {smart(record.predicted?.range)} · Body {smart(record.predicted?.body)}</div></td>
                <td>{['open','high','low','close','volume'].map(k=>smart(record.observed?.[k])).join(' / ')}<div className="muted" style={{fontSize:10}}>Range {smart(record.observed?.range)} · Body {smart(record.observed?.body)}</div></td>
-               <td>{record.absErrorPct?.close==null?'—':record.absErrorPct.close.toFixed(2)+'%'}</td>
+               <td>{['open','high','low','close','volume','range','body'].map(k=>record.absErrorPct?.[k]==null?'—':metric(record.absErrorPct[k],2)+'%').join(' / ')}</td><td>{record.predicted?.close!=null&&record.observed?.close!=null?smart(record.predicted.close-record.observed.close):'—'}</td>
              </tr>)}</tbody>
            </table>
          </div>

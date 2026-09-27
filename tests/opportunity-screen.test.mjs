@@ -27,7 +27,10 @@ test('trend result scores only matured five-session next-open outcomes, not futu
  assert.equal(r.currentSignal,'UP');
  assert.ok(r.testedSignalChecks>=20);
  assert.ok(r.historicalWinRate>0.5);
- assert.ok(r.wilsonLower95<=r.historicalWinRate);
+ assert.ok(r.wilsonLower95<=r.heldoutWinRate);
+ assert.ok(r.heldoutChecks>=20);
+ assert.ok(r.heldoutChecks<r.testedSignalChecks);
+ assert.ok(Number.isFinite(r.heldoutMeanGrossReturnPct));
  assert.equal(r.institutionalConsensus,'NOT_CONNECTED');
  assert.ok(r.lastCompletedTime===rows.at(-1).time);
  assert.equal(r.historicalHorizonDays,5);

@@ -103,9 +103,11 @@ export default function OpportunityLab(){
       <div><span>Last completed close</span><b>{smart(row.lastCompletedClose)}</b></div>
       <div><span>Observed as of</span><b style={{fontSize:11}}>{date(row.lastCompletedTime)}</b></div>
       <div><span>Historical signal wins</span><b>{row.testedSignalChecks?row.matchingWins+' / '+row.testedSignalChecks:'—'}</b></div>
-      <div><span>95% lower win-rate bound</span><b>{row.testedSignalChecks>=20?displayResult((row.wilsonLower95||0)*100,1):'INSUFFICIENT'}</b></div>
+      <div><span>Later-period lower win bound</span><b>{row.heldoutChecks>=20?displayResult((row.wilsonLower95||0)*100,1):'INSUFFICIENT'}</b></div>
       <div><span>Observed ATR / close</span><b>{displayResult((row.atrPct||0)*100,2)}</b></div>
       <div><span>5-session study return</span><b>{displayResult(row.historicalMeanGrossReturnPct,2)}</b></div>
+      <div><span>Later-period scored signals</span><b>{row.heldoutChecks||0}</b></div>
+      <div><span>Later-period mean gross return</span><b>{displayResult(row.heldoutMeanGrossReturnPct,2)}</b></div>
      </div>
      <p style={{margin:'9px 0 0',fontSize:12,lineHeight:1.55}}><b>Evidence:</b> {row.currentSignal==='UP'?'historical uptrend pattern':row.currentSignal==='DOWN'?'historical downward-trend pattern':'no directional trend signal'}; sample n={row.testedSignalChecks}. {row.drift?'Recent retrospective win-rate deterioration was detected.':'Current trend does not establish future returns.'} Session: {row.session}. </p>
      <div className="researchRule">
@@ -131,7 +133,7 @@ export default function OpportunityLab(){
    </article>)}
   </div>
   <div className="notice" style={{marginTop:15}}>
-   <b>Research limitations.</b> A ranked sampled watchlist is not a list of assets guaranteed to deliver large gains. Rank refers solely to measured historical evidence among the loaded instruments; observed volatility is possible magnitude of movement in either direction, not potential profit. A five-session gross study is not a simulation of the displayed illustrative stops or targets. Markets that are closed have no executable "today" entry.
+   <b>Research limitations.</b> A ranked sampled watchlist is not a list of assets guaranteed to deliver large gains. Rank refers solely to measured historical evidence among the loaded instruments; observed volatility is movement in either direction, not profit. The lower win-rate bound uses an approximate independent-trial assumption; even a later chronological evaluation segment can suffer data snooping and regime changes. A five-session gross study is not a simulation of the displayed illustrative stops or targets. Markets that are closed have no executable "today" entry.
   </div>
   <p className="muted" style={{fontSize:12,lineHeight:1.6,margin:'14px 0 0'}}>
    Public institutional methodology references: <a href="https://www.aqr.com/learning-center/systematic-equities" target="_blank" rel="noopener noreferrer">AQR systematic equity</a>, <a href="https://www.blackrock.com/institutions/en-us/investment-capabilities/strategies/systematic-investing" target="_blank" rel="noopener noreferrer">BlackRock systematic investing</a>, and <a href="https://www.cfainstitute.org/insights/professional-learning/refresher-readings/2026/backtesting-and-simulation" target="_blank" rel="noopener noreferrer">CFA Institute backtesting standards</a>. These are methodology sources; none supplies Zachitan with a live proprietary firm verdict.

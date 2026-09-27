@@ -39,3 +39,21 @@ Reference standards and source links: Vercel Cron Jobs usage and pricing; Vercel
 ## Cross-asset screen qualification
 
 The daily cross-asset watchlist uses a fixed, transparent 20/60-bar trend and 20-bar momentum rule. Nonoverlapping completed-bar evaluations enter at the next published open and exit after five market-observation sessions. Only the final 40% chronological evaluation tail determines the historical sample gate (minimum 20 applicable signals, lower approximate Wilson win-rate bound over 50%, positive gross mean return and no detected recent hit-rate collapse). Its first 60% is never included in this reported holdout gate. This split is *not* a genuinely externally untouched, post-development test; parameter selection and cross-market screening can still create selection bias. It is not evidence of profitability after fees. Market-time, transaction costs, position execution, licensed third-party forecasts and real institutional verdicts are still unverified.
+
+
+## Independent durable worker implementation
+
+A standalone, **not deployed** Node process is supplied at scripts/forecast-worker.mjs. It is deliberately forbidden to run on ephemeral Vercel storage. It polls completed Coinbase native intervals from a separate persistent host, uses the real provider observations, and writes an append-only fsynced event journal through lib/durable-live-ledger.mjs. The original ISSUE event is preserved; SETTLE is another event with the observed next candle. Idempotent IDs prevent double-counting. Records form a SHA-256 event hash chain and fail closed on corruption/truncated writes; a self-contained hash chain without an independently retained external head is **not** a tamper-proof compliance record. A single-process lock prevents accidental concurrent issuers. The worker is configured for up to four Coinbase symbols and four supported native intervals.
+
+Operational prerequisites, not claimed to exist: provision a dedicated always-running non-Vercel machine or suitable free/paid service, a **persistent** mounted volume whose parent directory already exists, an external supervisor that restarts after crashes, upstream quota and connectivity monitoring, a versioned access-controlled read API to expose verified events to the website, and a genuinely future post-selection qualification run. There is no currently authorized dedicated Zachitan durable DB or host connected to this project. A browser does not implement a 24/7 worker; deploying the React site alone does not start this process.
+
+Example, on a provisioned durable host only:
+
+    ZACHITAN_LEDGER_PATH=/persistent/volume/zachitan/events.jsonl \
+    ZACHITAN_WORKER_SYMBOLS=BTC-USD \
+    ZACHITAN_WORKER_INTERVALS=5m \
+    node scripts/forecast-worker.mjs
+
+No GitHub Actions, GitHub cron, Vercel cron, Vercel Edge Function or Vercel HTTP requests are needed by this separate worker. Its own host uptime and market-data requests are not free by definition; check actual hosting and provider quotas. It currently supports Coinbase source-native OHLCV only. Never represent Yahoo/ECB/AMFI reference values or unlicensed delayed prices as independently settled, tradable intraday candles. The existing website still shows a distinct browser-local issuance history; the worker journal is **not yet connected to the dashboard**.
+
+Expanded historical reconstruction: at most 128 selected eligible next-observation checks, plus a calibration warm-up, are returned by the existing market endpoint. Its displayed range is limited by actual provider history. Expanding the test window increases CPU work; the additional worker does not remove backend costs of users requesting uncached model computations. The extended history is still a reconstruction, not as-issued evidence or an observed trading-profit backtest.

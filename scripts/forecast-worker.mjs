@@ -48,10 +48,11 @@ async function poll(){
     // if the source has already become too late for the following outcome.
    }
   }
- }finally{running=false}
+ }finally{running=false;if(stopped)cleanup()}
 }
 const timer=setInterval(poll,60000);
-function stop(){stopped=true;clearInterval(timer);if(!running){closeSync(lockHandle);unlinkSync(lock);process.exit(0)}}
+function cleanup(){closeSync(lockHandle);unlinkSync(lock);process.exit(0)}
+function stop(){stopped=true;clearInterval(timer);if(!running)cleanup()}
 process.on('SIGINT',stop);process.on('SIGTERM',stop);
 process.stdout.write(JSON.stringify({startedAt:new Date().toISOString(),mode:'independent_host',
  instruments:symbols,intervals,ledger,readiness:'requires externally running host; no Vercel deployment'})+'\n');

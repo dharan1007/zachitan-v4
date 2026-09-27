@@ -1,10 +1,11 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {smart} from './Format';
+import {computeChartIndicators,CHART_OVERLAYS} from '@/lib/chart-indicators.mjs';
 
 const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
 const valid=v=>v!==null&&v!==undefined&&Number.isFinite(Number(v));
-const PADDING={l:15,r:80,t:20,b:33};
+const PADDING={l:20,r:112,t:22,b:44};
 function timeLabel(sec,span){
  const d=new Date(sec*1000);
  return span<3*86400?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'});
@@ -15,12 +16,14 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
  const [size,setSize]=useState({w:800,h:510});
  const [view,setView]=useState({end:null,count:125});
  const [cross,setCross]=useState(null);
+ const [selectedIndicators,setSelectedIndicators]=useState([]);
  // The live quote is never substituted into a completed historical OHLC candle.
  const series=useMemo(()=>candles.filter(row=>
   [row.time,row.open,row.high,row.low,row.close].every(valid)&&row.time>0&&row.low>0&&
   row.low<=Math.min(row.open,row.close)&&row.high>=Math.max(row.open,row.close)
  ).map(row=>({...row,time:Number(row.time),open:Number(row.open),high:Number(row.high),
   low:Number(row.low),close:Number(row.close)})),[candles]);
+ const indicatorSeries=useMemo(()=>computeChartIndicators(series),[series]);
  const points=useMemo(()=>forecast?.available?(forecast.points||[]).filter(p=>
   valid(p.price)&&Number(p.price)>0&&Number.isFinite(Number(p.bar))&&Number(p.bar)>0
  ):[],[forecast]);
@@ -68,6 +71,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   const visP=points.map(p=>({p,i:series.length-1+Number(p.bar)})).filter(z=>z.i>=start&&z.i<=end);
   const ys=[];
   for(const z of visC)ys.push(z.row.low,z.row.high);
+  for(const id of selectedIndicators){const values=indicatorSeries[id];if(Array.isArray(values))for(const z of visC)if(valid(values[z.i]))ys.push(Number(values[z.i]));}
   for(const z of visP){ys.push(Number(z.p.price));for(const k of [50,80,90])if(Array.isArray(z.p.ranges?.[k]))ys.push(...z.p.ranges[k].filter(valid).map(Number))}
   // Separate quote marker from source candles without allowing an extreme ticker
   // to distort the entire historical scale.
@@ -78,7 +82,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   const X=i=>pad.l+(i-start+.5)/count*plotW;
   const Y=value=>pad.t+(max-value)/span*plotH;
   return {w,h,pad,plotW,plotH,start,end,count,min,max,span,X,Y,visC,visP};
- },[size,view,series,points,maxFuture,totalMax]);
+ },[size,view,series,points,maxFuture,totalMax,indicatorSeries,selectedIndicators]);
 
  const nearest=useCallback(x=>{
   if(!series.length)return null;
@@ -98,7 +102,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,g.w,g.h);
   ctx.fillStyle='#fff';ctx.fillRect(0,0,g.w,g.h);
-  ctx.font='11px system-ui,sans-serif';ctx.textBaseline='middle';
+  ctx.font='13px system-ui,sans-serif';ctx.textBaseline='middle';
   for(let k=0;k<=5;k++){
    const y=g.pad.t+k*g.plotH/5,value=g.max-k*g.span/5;
    ctx.strokeStyle='#ebeee9';ctx.lineWidth=1;ctx.beginPath();
@@ -123,6 +127,22 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
     [...envelope].reverse().forEach(z=>ctx.lineTo(g.X(z.i),g.Y(z.p.ranges[80][0])));
     ctx.closePath();ctx.fillStyle='rgba(46,96,200,.09)';ctx.fill();
    }
+  }
+  // Overlays use precisely the same completed-candle indices as the price chart.
+  // Missing periods are left blank; no interpolated values are manufactured.
+  for(const overlay of CHART_OVERLAYS){
+   if(!selectedIndicators.includes(overlay.id))continue;
+   const values=indicatorSeries[overlay.id];
+   if(!Array.isArray(values))continue;
+   ctx.save();ctx.strokeStyle=overlay.color;ctx.lineWidth=1.9;ctx.beginPath();
+   let active=false;
+   for(const {i} of g.visC){
+    const v=values[i];
+    if(!valid(v)){active=false;continue;}
+    if(!active){ctx.moveTo(g.X(i),g.Y(Number(v)));active=true;}
+    else ctx.lineTo(g.X(i),g.Y(Number(v)));
+   }
+   ctx.stroke();ctx.restore();
   }
   const candleWidth=clamp(g.plotW/g.count*.62,1.5,13);
   for(const {row,i} of g.visC){
@@ -158,7 +178,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    ctx.beginPath();ctx.moveTo(cross.x,g.pad.t);ctx.lineTo(cross.x,g.h-g.pad.b);
    ctx.moveTo(g.pad.l,cross.y);ctx.lineTo(g.w-g.pad.r,cross.y);ctx.stroke();ctx.restore();
   }
- },[geom,series,currentLive,cross]);
+ },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators]);
 
  useEffect(()=>{
   let frame=requestAnimationFrame(draw);
@@ -221,11 +241,27 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    style={{display:'block',width:'100%',height:'100%',touchAction:'pan-y',cursor:'crosshair'}}
    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={stopDrag}
    onPointerCancel={stopDrag} onPointerLeave={()=>{if(!dragRef.current)setCross(null)}}/>
-  {tooltip&&<div style={{position:'absolute',left:12,top:12,zIndex:4,padding:'8px 10px',
-   maxWidth:'calc(100% - 130px)',border:'1px solid #d5dbe2',borderRadius:10,
-   background:'rgba(255,255,255,.96)',fontSize:11,color:'#24303b',pointerEvents:'none'}}>
-   {tooltip.kind==='observed'?<>Observed · O {smart(tooltip.row.open)} · H {smart(tooltip.row.high)} · L {smart(tooltip.row.low)} · C {smart(tooltip.row.close)} · V {smart(tooltip.row.volume)}</>
-    :<>Forecast {smart(tooltip.row.price)} · P(up) {valid(tooltip.row.pUp)?Math.round(tooltip.row.pUp*100)+'%':'—'}</>}
+  <div className="chartIndicatorMenu">
+   <details><summary className="btn">Indicators ({selectedIndicators.length})</summary>
+    <div className="indicatorMenuList">
+     <p>Choose overlays. They use published completed candles only.</p>
+     {CHART_OVERLAYS.map(option=><label key={option.id}><input type="checkbox" checked={selectedIndicators.includes(option.id)}
+      onChange={e=>{const checked=e.currentTarget.checked;setSelectedIndicators(old=>checked?[...old.filter(x=>x!==option.id),option.id]:old.filter(x=>x!==option.id));}}/>
+      <span style={{display:'inline-block',width:13,height:3,background:option.color}}/>{option.label}</label>)}
+    </div>
+   </details>
+  </div>
+  {tooltip&&<div className="marketChartReadout">
+   {tooltip.kind==='observed'?<>
+    <b>Observed · {new Date(tooltip.row.time*1000).toLocaleString()}</b>
+    <div className="chartOHLC">
+     <span>Open <strong>{smart(tooltip.row.open)}</strong></span>
+     <span>High <strong>{smart(tooltip.row.high)}</strong></span>
+     <span>Low <strong>{smart(tooltip.row.low)}</strong></span>
+     <span>Close <strong>{smart(tooltip.row.close)}</strong></span>
+     <span>Traded volume <strong>{smart(tooltip.row.volume)}</strong></span>
+    </div>
+   </>:<><b>Forecast checkpoint</b><div>Projected price {smart(tooltip.row.price)} · Probability of rising {valid(tooltip.row.pUp)?Math.round(tooltip.row.pUp*100)+'%':'unavailable'}</div></>}
   </div>}
   <div style={{position:'absolute',right:10,top:9,zIndex:4,display:'flex',gap:5}}>
    <button type="button" className="btn" onClick={()=>zoom(-1)} aria-label="Zoom in chart">+</button>
@@ -234,7 +270,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    <button type="button" className="btn" onClick={latest}>Latest</button>
   </div>
   <div style={{position:'absolute',left:12,bottom:32,fontSize:10,color:'#5e6773',pointerEvents:'none'}}>
-   Completed OHLC · live quote separate · drag to pan · wheel to zoom
+   Published candles · quote separate · indicators use past data · drag to pan · wheel to zoom
   </div>
  </div>;
 }

@@ -31,9 +31,13 @@ function validCandle(c){
   c.low<=Math.min(c.open,c.close)&&c.high>=Math.max(c.open,c.close)&&
   (c.volume==null||(finite(c.volume)&&c.volume>=0));
 }
-async function sourceCandles(symbol,now){
+async function sourceCandles(symbol,now,oldestOutstanding=null){
  const high=Math.floor(now/GRANULARITY)*GRANULARITY;
- const from=high-13*GRANULARITY;
+ // A failed scheduler cycle may have left unsettled forecasts outside the
+ // normal short fetch window. Fetch a bounded historical catch-up window.
+ // Coinbase enforces a maximum of 300 observations per candle query.
+ const desired=finite(oldestOutstanding)?Math.min(high-13*GRANULARITY,oldestOutstanding-GRANULARITY):high-13*GRANULARITY;
+ const from=Math.max(high-299*GRANULARITY,desired);
  const url=new URL('https://api.exchange.coinbase.com/products/'+encodeURIComponent(symbol)+'/candles');
  url.searchParams.set('granularity',String(GRANULARITY));
  url.searchParams.set('start',new Date(from*1000).toISOString());
@@ -128,6 +132,7 @@ export function summarizeIssued(rows=[]){
  return {settled:ordered.length,byField:stats};
 }
 async function settleExisting(env,symbol,candles,now){
+ if(!candles.length)return {settled:0,gaps:0};
  const pending=(await env.DB.prepare(
   "SELECT id,expected_time,origin_time FROM predictions WHERE symbol=? AND interval='5m' AND state='PENDING' ORDER BY origin_time DESC LIMIT 36"
  ).bind(symbol).all()).results||[];
@@ -140,8 +145,10 @@ async function settleExisting(env,symbol,candles,now){
    await env.DB.prepare("UPDATE predictions SET state='SETTLED',observed_json=?,settled_at=? WHERE id=? AND state='PENDING'")
     .bind(observed,now,row.id).run();
    settled++;
-  }else if(now>=row.expected_time+GRANULARITY*3){
-   // Missing Coinbase 24/7 slots are not reinterpreted as future candles.
+  }else if(now>=row.expected_time+GRANULARITY*3&&
+    candles[0].time<row.expected_time&&candles.at(-1).time>row.expected_time){
+   // Mark a genuine unobserved slot ONLY if surrounding published bars
+   // bracket that exact timestamp. A truncated fetch is not a source gap.
    await env.DB.prepare("UPDATE predictions SET state='UNOBSERVED_GAP',settled_at=? WHERE id=? AND state='PENDING'")
     .bind(now,row.id).run();
    gaps++;
@@ -180,7 +187,8 @@ async function tick(env,now){
  const chosen=String(env.TRACKED_SYMBOLS||'BTC-USD,ETH-USD').split(',').map(s=>safeSymbol(s.trim())).filter(Boolean).slice(0,2);
  for(const symbol of [...new Set(chosen)]){
   try{
-   const candles=await sourceCandles(symbol,now);
+   const unresolved=await env.DB.prepare("SELECT MIN(expected_time) AS oldest FROM predictions WHERE symbol=? AND state='PENDING'").bind(symbol).first();
+   const candles=await sourceCandles(symbol,now,unresolved?.oldest??null);
    const s=await settleExisting(env,symbol,candles,now);
    const i=await issueOne(env,symbol,candles,now);
    issued+=Number(i.issued);settled+=s.settled;gaps+=s.gaps;

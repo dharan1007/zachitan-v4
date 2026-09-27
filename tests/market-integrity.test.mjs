@@ -19,6 +19,15 @@ test('candle normalization sorts, de-duplicates, and rejects structurally invali
   assert.ok(['CLEAN', 'DEGRADED', 'CRITICAL'].includes(out.diagnostics.status));
 });
 
+test('missing volume is retained as unavailable, never a fabricated zero', () => {
+  const input = [
+    { time: 100, open: 100, high: 101, low: 99, close: 100, volume: null },
+    { time: 200, open: 100, high: 101, low: 99, close: 100, volume: 0 },
+    { time: 300, open: 100, high: 101, low: 99, close: 100, volume: 42 },
+  ];
+  assert.deepEqual(normalizeCandles(input).candles.map(x => x.volume), [null, 0, 42]);
+});
+
 test('integrity diagnostics mark heavily corrupted input critical', () => {
   const raw = [];
   for (let i = 1; i <= 20; i++) raw.push({ time: i * 60, open: 100, high: 101, low: 99, close: 100, volume: 10 });

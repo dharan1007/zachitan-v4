@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {candidateForecast,adaptForecast,summarizeIssued,targetPreopen} from './src/index.mjs';
+import {candidateForecast,adaptForecast,summarizeIssued,targetPreopen,schedulerIsHealthy} from './src/index.mjs';
 const fixture=(close=100,volume=1000)=>({time:1700000000,open:close*.998,close,high:close*1.01,low:close*.99,volume});
 test('source-only candidate is coherent and cannot look at future candles',()=>{
  const prior=fixture(99),last=fixture(100);
@@ -62,4 +62,15 @@ test('next-open forecast must be actually issued before its target candle has be
  assert.equal(targetPreopen(origin,target).canIssue,false);
  assert.equal(targetPreopen(origin,target+1).canIssue,false);
  assert.equal(targetPreopen(origin,origin.time+300).canIssue,false);
+});
+
+test('a cron heartbeat without fresh publisher data never claims live accuracy tracking',()=>{
+ const now=1000;
+ const row={finished_at:900,tracked:2,fresh_sources:2,failures_json:'[]'};
+ assert.equal(schedulerIsHealthy(row,now),true);
+ assert.equal(schedulerIsHealthy({...row,fresh_sources:1},now),false);
+ assert.equal(schedulerIsHealthy({...row,failures_json:'[{"symbol":"BTC-USD"}]'},now),false);
+ assert.equal(schedulerIsHealthy({...row,finished_at:1},now),false);
+ assert.equal(schedulerIsHealthy({...row,tracked:0,fresh_sources:0},now),false);
+ assert.equal(schedulerIsHealthy(null,now),false);
 });

@@ -17,7 +17,8 @@ const GROUPS={
  'Forex':[['USDINR=X','USD / INR','yahoo'],['EURUSD=X','EUR / USD','yahoo'],['EUR/INR','EUR / INR ECB reference','ecb']],
  'Funds':[['VFIAX','Vanguard 500 Index Fund','yahoo'],['FXAIX','Fidelity 500 Index Fund','yahoo']]
 };
-const TF=['1m','5m','15m','1h','1d','1wk'];
+const TF=['1m','5m','15m','1h','6h','1d','1wk'];
+const INTERVAL_SEC={'1m':60,'5m':300,'15m':900,'1h':3600,'6h':21600,'1d':86400,'1wk':604800};
 const RANGES=['1d','5d','1mo','3mo','6mo','1y','2y','5y','10y','max'];
 function clampInterval(v){return TF.includes(String(v))?String(v):'5m'}
 function clampRange(v){return RANGES.includes(String(v))?String(v):'1mo'}
@@ -34,6 +35,7 @@ export default function MarketLab(){
  const [options,setOptions]=useState(null),[optionsLoading,setOptionsLoading]=useState(false),[streamPrice,setStreamPrice]=useState(null),[streamTime,setStreamTime]=useState(null);
  const [orderFlow,setOrderFlow]=useState(null),[orderFlowLoading,setOrderFlowLoading]=useState(false);
  const [localLedger,setLocalLedger]=useState([]),[ledgerStatus,setLedgerStatus]=useState('LOCAL_ONLY');
+ const [tableLimit,setTableLimit]=useState(50);
  const inFlight=useRef(false),requestKey=useRef(null),abortRef=useRef(null),requestSeq=useRef(0);
  const isDailyOnly=selection.provider==='amfi'||selection.provider==='ecb'||selection.assetClass==='mutual_fund';
 
@@ -81,7 +83,7 @@ export default function MarketLab(){
 
  useEffect(()=>{setStreamPrice(null);setStreamTime(null);if(selection.provider!=='coinbase')return;let ws;try{ws=new WebSocket('wss://ws-feed.exchange.coinbase.com');ws.onopen=()=>ws.send(JSON.stringify({type:'subscribe',product_ids:[selection.symbol],channels:['ticker']}));ws.onmessage=e=>{try{const x=JSON.parse(e.data);if(x.type==='ticker'&&x.product_id===selection.symbol&&Number.isFinite(+x.price)){setStreamPrice(+x.price);setStreamTime(x.time||new Date().toISOString())}}catch{}}}catch{}return()=>{try{ws?.close()}catch{}}},[selection.provider,selection.symbol]);
 
- const choose=x=>{const s={symbol:x.symbol,name:x.name||x.symbol,provider:x.provider||'yahoo',assetClass:x.assetClass||'market',exchange:x.exchange||''};setData(null);setSelection(s);setQuery(s.symbol);setOptions(null);if(s.provider==='amfi'||s.provider==='ecb'||s.assetClass==='mutual_fund'){setInterval('1d');if(['1d','5d'].includes(range))setRange('2y')}};
+ const choose=x=>{const s={symbol:x.symbol,name:x.name||x.symbol,provider:x.provider||'yahoo',assetClass:x.assetClass||'market',exchange:x.exchange||''};setData(null);setSelection(s);setQuery(s.symbol);setOptions(null);if(s.provider==='amfi'||s.provider==='ecb'||s.assetClass==='mutual_fund'){setInterval('1d');if(['1d','5d'].includes(range))setRange('2y')}else if((s.provider==='coinbase'&&interval==='1wk')||(s.provider==='yahoo'&&interval==='6h'))setInterval('1d')};
  const loadOptions=async()=>{setOptionsLoading(true);try{setOptions(await getJson(`/api/data?action=options&symbol=${encodeURIComponent(selection.symbol)}`))}catch(e){setOptions({state:'DEGRADED',message:e.message,calls:[],puts:[]})}finally{setOptionsLoading(false)}};
  const loadOrderFlow=async()=>{setOrderFlowLoading(true);try{setOrderFlow(await getJson(`/api/data?action=microstructure&symbol=${encodeURIComponent(selection.symbol)}`))}catch(e){setOrderFlow({error:e.message||'Exchange microstructure unavailable'})}finally{setOrderFlowLoading(false)}};
  const f=data?.forecast,v=data?.validation,ind=data?.indicators,m=orderFlow?.microstructure||data?.microstructure,quote=data?.quote||{},meta=data?.meta||{};
@@ -96,6 +98,8 @@ export default function MarketLab(){
  const forecastPoints=publishable?(f?.points||[]):[];
  const canOptions=['stock','etf','index'].includes(selection.assetClass)||['stock','etf','index'].includes(String(meta.assetClass||'').toLowerCase());
  const optionsNear=useMemo(()=>{if(!options?.calls?.length&&!options?.puts?.length)return[];const spot=options.metrics?.spot||+quote.price||0;return[...(options.calls||[]).map(x=>({...x,type:'Call'})),...(options.puts||[]).map(x=>({...x,type:'Put'}))].sort((a,b)=>Math.abs(a.strike-spot)-Math.abs(b.strike-spot)).slice(0,16)},[options,quote.price]);
+ const candleRows=data?.candles||[];
+ const displayedHistory=useMemo(()=>candleRows.slice(-tableLimit).slice().reverse(),[candleRows,tableLimit]);
  const integrity=data?.quality?.integrity||{};
  const integrityIssues=(integrity.invalidRowsRemoved||0)+(integrity.duplicatesRemoved||0)+(integrity.outOfOrderPairs||0);
 
@@ -106,8 +110,8 @@ export default function MarketLab(){
  return <div className={`marketLayout ${loading?'loading':''}`}>
   <aside className="card controls">
    <label className="label">Find an instrument</label><AssetSearch value={query} onChange={setQuery} onSelect={choose} placeholder="Ticker, company, index, FX or crypto…" label="Find an instrument" help="Search by symbol or name"/>
-   <div className="controlGroup"><label className="label">Observation size</label><div className="chips">{TF.map(t=><button key={t} disabled={isDailyOnly&&t!=='1d'} className={`chip ${interval===t?'on':''}`} onClick={()=>setInterval(t)}>{t}</button>)}</div>{isDailyOnly&&<p className="muted" style={{fontSize:10}}>Daily/reference source. Intraday bars are not fabricated.</p>}</div>
-   <div className="controlGroup"><label className="label">History</label><select className="select" value={range} onChange={e=>setRange(e.target.value)}>{RANGES.map(r=><option key={r} value={r}>{r}</option>)}</select></div>
+   <div className="controlGroup"><label className="label">Observation size</label><div className="chips">{TF.map(t=><button key={t} disabled={(isDailyOnly&&t!=='1d')||(selection.provider==='coinbase'&&t==='1wk')||(selection.provider==='yahoo'&&t==='6h')} className={`chip ${interval===t?'on':''}`} onClick={()=>setInterval(t)}>{t}</button>)}</div>{isDailyOnly&&<p className="muted" style={{fontSize:10}}>Daily/reference source. Intraday bars are not fabricated.</p>}</div>
+   <div className="controlGroup"><label className="label">Display history</label><select className="select" value={range} onChange={e=>setRange(e.target.value)}>{RANGES.map(r=><option key={r} value={r}>{r}</option>)}</select></div>
    <div className="controlGroup"><label className="label">Forecast horizon</label><select className="select" value={horizon} onChange={e=>setHorizon(+e.target.value)}>{[3,5,8,12,20,30,50].map(x=><option key={x} value={x}>{x} market observations</option>)}</select></div>
    <div className="controlGroup"><button className="btn primary" style={{width:'100%'}} onClick={()=>load()}>Refresh snapshot</button></div>
    <details className="controlGroup"><summary className="label" style={{cursor:'pointer'}}>Quick markets</summary><div style={{marginTop:10}}>{Object.entries(GROUPS).map(([g,rows])=><div key={g} style={{marginBottom:9}}><div style={{fontSize:10,color:'#85888e',margin:'0 0 5px'}}>{g}</div><div className="chips">{rows.map(([s,n,p])=><button key={`${p}:${s}`} className={`chip ${selection.symbol===s?'on':''}`} title={n} onClick={()=>choose({symbol:s,name:n,provider:p,assetClass:assetClassForGroup(g)})}>{s}</button>)}</div></div>)}</div></details>
@@ -120,7 +124,38 @@ export default function MarketLab(){
     <div className="grid3" style={{marginTop:18}}><div className="metric"><span>Market session</span><b>{data?.session?.state||'—'}</b><small>{data?.session?.transport||'source status pending'}</small></div><div className="metric"><span>Forecast status</span><b>{titleCase(forecastState)}</b><small>{f?.abstainReason||skillState}</small></div><div className="metric"><span>Data integrity</span><b>{integrityIssues===0?'CLEAN':`${integrityIssues} repaired`}</b><small>{integrity.duplicatesRemoved||0} duplicate · {integrity.invalidRowsRemoved||0} invalid · {integrity.outOfOrderPairs||0} order</small></div></div>
    </div>
 
-   <div className="card chartPanel"><div className="chartToolbar"><div><b style={{fontSize:13}}>{meta.referenceValueOnly?'Published reference values':'Observed market data'}</b><div className="muted" style={{fontSize:10,marginTop:2}}>{publishable?'Validated forecast overlay is enabled.':'Forecast overlay is withheld until publication gates pass.'} Drag to pan · wheel or +/− to zoom</div></div><SourceStatus provider={data?.provenance?.provider||selection.provider} state={data?'CONNECTED':'CHECKING'}/></div><div className="chartWrap"><InteractiveChart key={selection.provider+':'+selection.symbol+':'+interval} candles={data?.candles||[]} forecast={chartForecast} livePrice={displayPrice}/></div><div className="chartLegend"><span>{meta.referenceValueOnly?'The published NAV/reference values are genuine, but the flat OHLC chart is a visualization proxy. No actual opens, highs, lows or traded volumes were reported.':'Observed OHLC comes from the named provider. Numeric forecast paths appear only after publication gates pass.'}</span><span>{data?.provenance?.provider||'Source pending'} · synthetic: false</span></div></div>
+   <div className="card chartPanel"><div className="chartToolbar"><div><b style={{fontSize:13}}>{meta.referenceValueOnly?'Published reference values':'Observed market data'}</b><div className="muted" style={{fontSize:10,marginTop:2}}>{publishable?'Validated forecast overlay is enabled.':'Forecast overlay is withheld until publication gates pass.'} Drag to pan · wheel or +/− to zoom</div></div><SourceStatus provider={data?.provenance?.provider||selection.provider} state={data?'CONNECTED':'CHECKING'}/></div><div className="chartWrap"><InteractiveChart key={selection.provider+':'+selection.symbol+':'+interval} candles={data?.candles||[]} forecast={chartForecast} livePrice={displayPrice}/></div><div className="chartLegend"><span>{meta.referenceValueOnly?'Published NAV/reference values are genuine; the flat display is not real OHLC or traded volume.':'Open, high, low and close are completed source bars. The live ticker is separate.'}</span><span>{data?.provenance?.provider||'Source pending'} · no invented candles</span></div>
+    <section className="candleHistory" aria-label="Published candle history">
+     <div className="candleHistoryHead">
+      <div><h3>Observed price history</h3><p>Source timestamps are shown in your device timezone. Rows are published candles, not projections. A missing slot is never filled with a fabricated candle.</p></div>
+      <label>Rows <select className="select" value={tableLimit} onChange={e=>setTableLimit(Number(e.target.value))}>{[25,50,100,250,1000].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
+     </div>
+     <div className="candleHistoryScroll"><table className="table candleTable">
+      <thead><tr><th>Published bar</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Change vs preceding close</th><th>High − low</th><th>Time since preceding bar</th></tr></thead>
+      <tbody>{displayedHistory.map((bar,i)=>{
+       const index=candleRows.length-1-i,previous=candleRows[index-1];
+       const diff=previous?.close>0?bar.close/previous.close-1:null;
+       const gap=previous?.time?bar.time-previous.time:null;
+       const expected=INTERVAL_SEC[meta.interval||interval];
+       const gapLabel=gap==null?'—':expected&&gap>expected*1.1
+        ?selection.provider==='coinbase'?'Publication gap; verify source': 'Session closure or publication gap'
+        :expected&&gap===expected?'One selected interval':Math.round(gap/60)+' min';
+       return <tr key={bar.time}>
+        <td><b>{date(bar.time)}</b></td>
+        <td>{meta.referenceValueOnly?'Reference only':smart(bar.open)}</td>
+        <td>{meta.referenceValueOnly?'Reference only':smart(bar.high)}</td>
+        <td>{meta.referenceValueOnly?'Reference only':smart(bar.low)}</td>
+        <td><b>{smart(bar.close)}</b></td>
+        <td>{meta.referenceValueOnly?'Not published':smart(bar.volume)}</td>
+        <td className={diff>0?'positive':diff<0?'negative':''}>{diff==null?'—':signedPct(diff)}</td>
+        <td>{meta.referenceValueOnly?'Not published':bar.high!=null&&bar.low!=null?smart(bar.high-bar.low):'—'}</td>
+        <td>{gapLabel}</td>
+       </tr>;
+      })}</tbody>
+     </table></div>
+     <p className="candleHistoryFoot">{candleRows.length?'Showing '+displayedHistory.length+' of '+candleRows.length+' displayed source candles. First: '+date(candleRows[0].time)+'; latest: '+date(candleRows.at(-1).time)+'.':'Waiting for published candles.'} Model analysis uses its separate available evidence window; choosing a display range does not create missing historic data.</p>
+    </section>
+   </div>
 
    <div className="forecastPanel">
     <div className="card forecastHero"><p className="eyebrow">Forecast decision</p>{f?.available?<>{publishable?<><div className="forecastCenter">{smart(f.center)}</div><div className="muted" style={{fontSize:12}}>{horizon} observations ahead · current {smart(f.current)} · center change {signedPct(f.center/f.current-1)}</div></>:<><div className="forecastCenter" style={{fontSize:28}}>TARGET WITHHELD</div><div className="muted" style={{fontSize:12}}>{f.abstainReason||'The forecast is research-only because production publication gates are not satisfied.'}</div></>}<div className="notice" style={{marginTop:12}}><b>{skillState}</b><div style={{marginTop:4,fontSize:11}}>Decision state: {titleCase(forecastState)} · model: {titleCase(f.modelStatus)}{f?.regime?.elevated?` · regime move ${pct(f.regime.absoluteMove)}`:''}</div></div><div className="rangeList">{[50,80,90].map(k=><div className="rangeRow" key={k}><span>{k}%</span><b>{f.ranges?.[k]?`${smart(f.ranges[k][0])} — ${smart(f.ranges[k][1])}`:'Withheld'}</b><small>{f.ranges?.[k]?'historical empirical uncertainty; not a point target':'insufficient dependence-adjusted evidence'}</small></div>)}</div></>:<div className="notice">{f?.reason||'Forecast unavailable for the current history.'}</div>}</div>
@@ -192,6 +227,7 @@ export default function MarketLab(){
          </table>
        </div>
        <div className="notice" style={{marginTop:12}}><b>Accuracy is measured, not asserted.</b> The MAPE columns are the mean of the displayed per-origin absolute percentage errors (100 × |prediction / actual − 1|); only positive actuals are eligible. The separate skill column compares mean absolute log errors against a matched naive baseline. Positive skill means lower historical log error, not positive investment returns. Missing volume or bands are never invented.</div>
+       <div className="notice" style={{marginTop:12}}>Measured window: {date(data.nextBar.firstEvaluationTime)} to {date(data.nextBar.lastEvaluationTime)} · {data.nextBar.evaluationChecks||0} completed next-bar outcomes. {data.nextBar.skippedUnobservedIntervals?data.nextBar.skippedUnobservedIntervals+' crypto publisher time gaps excluded from scoring.':'No publisher gaps were excluded in this window.'} If the source provides fewer bars than requested, no longer history is inferred.</div>
        <BacktestErrorChart history={data.nextBar.history||[]}/>
        <details style={{marginTop:18}}>
          <summary style={{cursor:'pointer',fontWeight:700}}>Observed interval coverage and historical predictions</summary>

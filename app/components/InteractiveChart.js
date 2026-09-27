@@ -11,7 +11,7 @@ function timeLabel(sec,span){
  return span<3*86400?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'});
 }
 
-export default function InteractiveChart({candles=[],forecast=null,livePrice=null,provider='coinbase',interval='5m'}){
+export default function InteractiveChart({candles=[],forecast=null,livePrice=null,provider='coinbase',interval='5m',referenceValueOnly=false}){
  const canvasRef=useRef(null),hostRef=useRef(null),dragRef=useRef(null),totalRef=useRef(0);
  const [size,setSize]=useState({w:800,h:510});
  const [view,setView]=useState({end:null,count:125});
@@ -149,14 +149,22 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    }
    ctx.stroke();ctx.restore();
   }
-  const candleWidth=clamp(g.plotW/g.count*.62,1.5,13);
-  for(const {row,i} of g.visC){
-   const x=g.X(i),positive=row.close>=row.open;
-   ctx.strokeStyle=positive?'#147d58':'#cb4a45';
-   ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1;
-   ctx.beginPath();ctx.moveTo(x,g.Y(row.high));ctx.lineTo(x,g.Y(row.low));ctx.stroke();
-   const top=g.Y(Math.max(row.open,row.close)),bottom=g.Y(Math.min(row.open,row.close));
-   ctx.fillRect(x-candleWidth/2,top,candleWidth,Math.max(1,bottom-top));
+  if(referenceValueOnly){
+   // NAV and central-bank reference points have no published OHLC or volume:
+   // show a reference-value line, never an invented flat candle.
+   ctx.save();ctx.strokeStyle='#125aa0';ctx.lineWidth=2.3;ctx.beginPath();
+   g.visC.forEach(({row,i},k)=>k?ctx.lineTo(g.X(i),g.Y(row.close)):ctx.moveTo(g.X(i),g.Y(row.close)));
+   ctx.stroke();ctx.restore();
+  }else{
+   const candleWidth=clamp(g.plotW/g.count*.62,1.5,13);
+   for(const {row,i} of g.visC){
+    const x=g.X(i),positive=row.close>=row.open;
+    ctx.strokeStyle=positive?'#147d58':'#cb4a45';
+    ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,g.Y(row.high));ctx.lineTo(x,g.Y(row.low));ctx.stroke();
+    const top=g.Y(Math.max(row.open,row.close)),bottom=g.Y(Math.min(row.open,row.close));
+    ctx.fillRect(x-candleWidth/2,top,candleWidth,Math.max(1,bottom-top));
+   }
   }
   if(g.visP.length){
    ctx.save();ctx.strokeStyle='#2860d2';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
@@ -183,7 +191,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    ctx.beginPath();ctx.moveTo(cross.x,g.pad.t);ctx.lineTo(cross.x,g.h-g.pad.b);
    ctx.moveTo(g.pad.l,cross.y);ctx.lineTo(g.w-g.pad.r,cross.y);ctx.stroke();ctx.restore();
   }
- },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators,provider,expectedSec]);
+ },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators,provider,expectedSec,referenceValueOnly]);
 
  useEffect(()=>{
   let frame=requestAnimationFrame(draw);
@@ -258,14 +266,15 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   </div>
   {tooltip&&<div className="marketChartReadout">
    {tooltip.kind==='observed'?<>
-    <b>Observed · {new Date(tooltip.row.time*1000).toLocaleString()}</b>
+    <b>{referenceValueOnly?'Published reference value':'Observed candle'} · {new Date(tooltip.row.time*1000).toLocaleString()}</b>
+    {referenceValueOnly?<div className="chartOHLC"><span>Published value <strong>{smart(tooltip.row.close)}</strong></span><span>No published open, high, low or trade volume</span></div>:
     <div className="chartOHLC">
      <span>Open <strong>{smart(tooltip.row.open)}</strong></span>
      <span>High <strong>{smart(tooltip.row.high)}</strong></span>
      <span>Low <strong>{smart(tooltip.row.low)}</strong></span>
      <span>Close <strong>{smart(tooltip.row.close)}</strong></span>
      <span>Traded volume <strong>{smart(tooltip.row.volume)}</strong></span>
-    </div>
+    </div>}
    </>:<><b>Forecast checkpoint</b><div>Projected price {smart(tooltip.row.price)} · Probability of rising {valid(tooltip.row.pUp)?Math.round(tooltip.row.pUp*100)+'%':'unavailable'}</div></>}
   </div>}
   <div style={{position:'absolute',right:10,top:9,zIndex:4,display:'flex',gap:5}}>

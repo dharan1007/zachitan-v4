@@ -18,7 +18,8 @@ function issue(db,id='coinbase:BTC-USD:5m:1000:v2',target=1600){
   '{"open":100,"close":101}', '{"weight":0}');
 }
 test('schema enforces target two five-minute steps beyond source origin',()=>{
- const db=newDb();assert.throws(()=>issue(db,'wrong-horizon',1300));
+ const db=newDb();assert.equal(issue(db,'wrong-horizon',1300).changes,0);
+ assert.equal(db.prepare('SELECT COUNT(*) AS n FROM predictions').get().n,0);
  assert.equal(issue(db).changes,1);
  assert.equal(db.prepare('SELECT expected_time FROM predictions LIMIT 1').get().expected_time,1600);
  db.close();

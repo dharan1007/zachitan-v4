@@ -4,6 +4,7 @@ import InteractiveChart from './InteractiveChart';
 import BacktestErrorChart from './BacktestErrorChart';
 import IndependentVerification from './IndependentVerification';
 import MarketIndicatorPanels from './MarketIndicatorPanels';
+import TimeframeResearch from './TimeframeResearch';
 import { classifyGap } from '@/lib/candle-calendar.mjs';
 import Score from './Score';
 import SourceStatus from './SourceStatus';
@@ -173,6 +174,8 @@ export default function MarketLab(){
      <p className="candleHistoryFoot">{candleRows.length?'Showing '+displayedHistory.length+' of '+candleRows.length+' displayed source candles. First: '+date(candleRows[0].time)+'; latest: '+date(candleRows.at(-1).time)+'.':'Waiting for published candles.'} Predicted fields are drawn only from recorded live forecasts or identified historical replays; no missing prediction or candle is manufactured.</p>
     </section>
    </div>
+
+   <TimeframeResearch selection={selection} interval={interval} onSelect={setInterval} data={data}/>
 
    <div className="forecastPanel">
     <div className="card forecastHero"><p className="eyebrow">Future-price estimate</p>{f?.available?<>{publishable?<><div className="forecastCenter">{smart(f.center)}</div><div className="muted" style={{fontSize:12}}>{horizon} observations ahead · current {smart(f.current)} · center change {signedPct(f.center/f.current-1)}</div></>:<><div className="forecastCenter" style={{fontSize:28}}>NOT ENOUGH EVIDENCE</div><div className="muted" style={{fontSize:12}}>{f.abstainReason||'The forecast is research-only because production publication gates are not satisfied.'}</div></>}<div className="notice" style={{marginTop:12}}><b>{skillState}</b><div style={{marginTop:4,fontSize:11}}>Decision state: {titleCase(forecastState)} · model: {titleCase(f.modelStatus)}{f?.regime?.elevated?` · regime move ${pct(f.regime.absoluteMove)}`:''}</div></div><div className="rangeList">{[50,80,90].map(k=><div className="rangeRow" key={k}><span>{k}%</span><b>{f.ranges?.[k]?`${smart(f.ranges[k][0])} — ${smart(f.ranges[k][1])}`:'Withheld'}</b><small>{f.ranges?.[k]?'historical empirical uncertainty; not a point target':'insufficient dependence-adjusted evidence'}</small></div>)}</div></>:<div className="notice">{f?.reason||'Forecast unavailable for the current history.'}</div>}</div>

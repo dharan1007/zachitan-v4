@@ -98,6 +98,7 @@ export default function MarketLab(){
  const forecastPoints=publishable?(f?.points||[]):[];
  const canOptions=['stock','etf','index'].includes(selection.assetClass)||['stock','etf','index'].includes(String(meta.assetClass||'').toLowerCase());
  const optionsNear=useMemo(()=>{if(!options?.calls?.length&&!options?.puts?.length)return[];const spot=options.metrics?.spot||+quote.price||0;return[...(options.calls||[]).map(x=>({...x,type:'Call'})),...(options.puts||[]).map(x=>({...x,type:'Put'}))].sort((a,b)=>Math.abs(a.strike-spot)-Math.abs(b.strike-spot)).slice(0,16)},[options,quote.price]);
+ const supportedIntervals=TF.filter(t=>!(isDailyOnly&&t!=='1d')&&!(selection.provider==='coinbase'&&t==='1wk')&&!(selection.provider==='yahoo'&&t==='6h'));
  const candleRows=data?.candles||[];
  const displayedHistory=useMemo(()=>candleRows.slice(-tableLimit).slice().reverse(),[candleRows,tableLimit]);
  const integrity=data?.quality?.integrity||{};
@@ -115,7 +116,7 @@ export default function MarketLab(){
    <div className="controlGroup"><label className="label">Forecast horizon</label><select className="select" value={horizon} onChange={e=>setHorizon(+e.target.value)}>{[3,5,8,12,20,30,50].map(x=><option key={x} value={x}>{x} market observations</option>)}</select></div>
    <div className="controlGroup"><button className="btn primary" style={{width:'100%'}} onClick={()=>load()}>Refresh snapshot</button></div>
    <details className="controlGroup"><summary className="label" style={{cursor:'pointer'}}>Quick markets</summary><div style={{marginTop:10}}>{Object.entries(GROUPS).map(([g,rows])=><div key={g} style={{marginBottom:9}}><div style={{fontSize:10,color:'#85888e',margin:'0 0 5px'}}>{g}</div><div className="chips">{rows.map(([s,n,p])=><button key={`${p}:${s}`} className={`chip ${selection.symbol===s?'on':''}`} title={n} onClick={()=>choose({symbol:s,name:n,provider:p,assetClass:assetClassForGroup(g)})}>{s}</button>)}</div></div>)}</div></details>
-   <div className="controlGroup notice">A price target is shown only when the session is valid, the latest regime is not a jump outlier, and walk-forward point plus probability skill both beat their naïve baselines.</div>
+   <div className="controlGroup notice">A multi-bar price target appears only after independent historical and later holdout checks. No result guarantees investment returns.</div>
   </aside>
 
   <div className="marketMain">
@@ -157,9 +158,39 @@ export default function MarketLab(){
     </section>
    </div>
 
+
+   <section className="card pad" aria-label="Timeframe entry and exit reference">
+    <div className="sectionHead">
+     <div><p className="eyebrow">Research the timing · compare horizons</p><h2>When could an entry and exit be evaluated?</h2></div>
+     <p>Choose a timeframe to inspect its own real completed candles and next-bar error record. A projected level is not a verified executable entry or an established profitable trade.</p>
+    </div>
+    <div className="notice" style={{margin:'12px 0'}}>There is no evidence-based “best buy” or “best sell” time unless a strategy has independently beaten an executable after-cost benchmark. This view measures price errors, not fills, spreads, slippage, taxes, stop execution or realized investment returns.</div>
+    <div className="candleHistoryScroll"><table className="table candleTable timingGuideTable">
+     <thead><tr><th>Timeframe</th><th>Study type</th><th>Predicted next open</th><th>Predicted next close</th><th>Projected candle high / low</th><th>Historical closing-price error</th><th>Evidence</th></tr></thead>
+     <tbody>{supportedIntervals.map(t=>{
+      const selected=t===interval;
+      const audit=selected?data?.nextBar:null;
+      const price=selected&&audit?.available&&audit?.forecast?audit.forecast:null;
+      const checks=audit?.accuracy?.close?.samples||0;
+      const lastError=audit?.history?.at(-1)?.absErrorPct?.close;
+      return <tr key={t}>
+       <td><button type="button" className={'chip '+(selected?'on':'')} onClick={()=>{setInterval(t);setTableLimit(50)}}>{t} {selected?'· selected':'· inspect'}</button></td>
+       <td>{['1m','5m','15m','1h','6h'].includes(t)?'Intraday':'Daily / longer term'}</td>
+       <td>{selected?(price?<b>{smart(price.open)}</b>:'Not available'):'Select timeframe'}</td>
+       <td>{selected?(price?<b>{smart(price.close)}</b>:'Not available'):'Select timeframe'}</td>
+       <td>{selected?(price?smart(price.high)+' / '+smart(price.low):'Not available'):'Select timeframe'}</td>
+       <td>{selected?(checks?metric(audit.accuracy.close.meanAbsPctError,2)+'% over '+checks+' observations':'Insufficient outcomes'):'Not measured in this view'}</td>
+       <td>{selected?(checks?'Last observed closing error '+(lastError==null?'unavailable':metric(lastError,3)+'%')+'. Historical reconstruction; not an entry signal.':'No qualified timing evidence.'):'Loads source on selection'}</td>
+      </tr>;
+     })}</tbody>
+    </table></div>
+    {data?.meta?.historyDisplayCapped?<div className="notice" style={{marginTop:12}}>Publisher history limit: you requested approximately {data.meta.requestedDisplayBars} {interval} candles, but this source request is capped at {data.meta.displayedBarCap} bars. Only actually retrieved dates are displayed or tested; a one-month selection does not imply one month of minute-level evidence.</div>:null}
+    <p className="candleHistoryFoot">The selected timeframe alone has a computed projection. Other timeframes load independently when selected; figures are never scaled from five-minute forecasts into invented daily or weekly forecasts. Open, high, low and close are different outcomes, and the next open may gap beyond any predicted level. This is experimental research, not an instruction to trade.</p>
+   </section>
+
    <div className="forecastPanel">
-    <div className="card forecastHero"><p className="eyebrow">Forecast decision</p>{f?.available?<>{publishable?<><div className="forecastCenter">{smart(f.center)}</div><div className="muted" style={{fontSize:12}}>{horizon} observations ahead · current {smart(f.current)} · center change {signedPct(f.center/f.current-1)}</div></>:<><div className="forecastCenter" style={{fontSize:28}}>TARGET WITHHELD</div><div className="muted" style={{fontSize:12}}>{f.abstainReason||'The forecast is research-only because production publication gates are not satisfied.'}</div></>}<div className="notice" style={{marginTop:12}}><b>{skillState}</b><div style={{marginTop:4,fontSize:11}}>Decision state: {titleCase(forecastState)} · model: {titleCase(f.modelStatus)}{f?.regime?.elevated?` · regime move ${pct(f.regime.absoluteMove)}`:''}</div></div><div className="rangeList">{[50,80,90].map(k=><div className="rangeRow" key={k}><span>{k}%</span><b>{f.ranges?.[k]?`${smart(f.ranges[k][0])} — ${smart(f.ranges[k][1])}`:'Withheld'}</b><small>{f.ranges?.[k]?'historical empirical uncertainty; not a point target':'insufficient dependence-adjusted evidence'}</small></div>)}</div></>:<div className="notice">{f?.reason||'Forecast unavailable for the current history.'}</div>}</div>
-    <div className="card pad"><Score value={f?.evidenceScore} title="Evidence score" copy="Similarity evidence after concentration and temporal-dependence penalties."/><div className="divider"/><Score value={f?.calibrationScore} title="Calibration score" copy="Walk-forward error skill, probability skill and interval coverage. N/A means it was not measured."/><div className="divider"/><div className="grid2"><div className="metric"><span>P(above current)</span><b>{f?.available?pct(f?.direction?.up):'—'}</b></div><div className="metric"><span>P(below current)</span><b>{f?.available?pct(f?.direction?.down):'—'}</b></div><div className="metric"><span>Dependence-adjusted N</span><b>{num(f?.effectiveN,1)}</b></div><div className="metric"><span>Interactive validation</span><b>{v?.checks||'—'}</b><small>up to {data?.compute?.validationOriginsMax||36} origins</small></div></div></div>
+    <div className="card forecastHero"><p className="eyebrow">Forecast reliability</p>{f?.available?<>{publishable?<><div className="forecastCenter">{smart(f.center)}</div><div className="muted" style={{fontSize:12}}>{horizon} observations ahead · current {smart(f.current)} · center change {signedPct(f.center/f.current-1)}</div></>:<><div className="forecastCenter" style={{fontSize:28}}>TARGET WITHHELD</div><div className="muted" style={{fontSize:12}}>{f.abstainReason||'The forecast is research-only because production publication gates are not satisfied.'}</div></>}<div className="notice" style={{marginTop:12}}><b>{skillState}</b><div style={{marginTop:4,fontSize:11}}>Forecast state: {titleCase(forecastState)} · evidence: {titleCase(f.modelStatus)}{f?.regime?.elevated?` · regime move ${pct(f.regime.absoluteMove)}`:''}</div></div><div className="rangeList">{[50,80,90].map(k=><div className="rangeRow" key={k}><span>{k}%</span><b>{f.ranges?.[k]?`${smart(f.ranges[k][0])} — ${smart(f.ranges[k][1])}`:'Withheld'}</b><small>{f.ranges?.[k]?'historical empirical uncertainty; not a point target':'insufficient dependence-adjusted evidence'}</small></div>)}</div></>:<div className="notice">{f?.reason||'Forecast unavailable for the current history.'}</div>}</div>
+    <div className="card pad"><Score value={f?.evidenceScore} title="Historical evidence" copy="How many comparable market observations exist after accounting for repeated or dependent patterns."/><div className="divider"/><Score value={f?.calibrationScore} title="Forecast reliability" copy="Historical prediction errors, probability checks and observed uncertainty-band coverage. Unmeasured values appear as unavailable."/><div className="divider"/><div className="grid2"><div className="metric"><span>P(above current)</span><b>{f?.available?pct(f?.direction?.up):'—'}</b></div><div className="metric"><span>P(below current)</span><b>{f?.available?pct(f?.direction?.down):'—'}</b></div><div className="metric"><span>Independent-like examples</span><b>{num(f?.effectiveN,1)}</b></div><div className="metric"><span>Historical checks</span><b>{v?.checks||'—'}</b><small>up to {data?.compute?.validationOriginsMax||36} origins</small></div></div></div>
    </div>
 
 

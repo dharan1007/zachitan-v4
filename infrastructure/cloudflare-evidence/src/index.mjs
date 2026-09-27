@@ -138,26 +138,26 @@ export function summarizeIssued(rows=[]){
 async function settleExisting(env,symbol,candles,now){
  if(!candles.length)return {settled:0,gaps:0};
  const pending=(await env.DB.prepare(
-  "SELECT id,expected_time,origin_time FROM predictions WHERE symbol=? AND interval='5m' AND state='PENDING' ORDER BY origin_time DESC LIMIT 36"
+  "SELECT id,expected_time,origin_time FROM predictions WHERE symbol=? AND interval='5m' AND state='PENDING' ORDER BY origin_time DESC LIMIT 300"
  ).bind(symbol).all()).results||[];
  const index=new Map(candles.map(c=>[c.time,c]));
  let settled=0,gaps=0;
+ const updates=[];
  for(const row of pending){
   const actual=index.get(row.expected_time);
   if(actual){
    const observed=JSON.stringify(actual);
-   await env.DB.prepare("UPDATE predictions SET state='SETTLED',observed_json=?,settled_at=? WHERE id=? AND state='PENDING'")
-    .bind(observed,now,row.id).run();
+   updates.push(env.DB.prepare("UPDATE predictions SET state='SETTLED',observed_json=?,settled_at=? WHERE id=? AND state='PENDING'").bind(observed,now,row.id));
    settled++;
   }else if(now>=row.expected_time+GRANULARITY*3&&
     candles[0].time<row.expected_time&&candles.at(-1).time>row.expected_time){
    // Mark a genuine unobserved slot ONLY if surrounding published bars
    // bracket that exact timestamp. A truncated fetch is not a source gap.
-   await env.DB.prepare("UPDATE predictions SET state='UNOBSERVED_GAP',settled_at=? WHERE id=? AND state='PENDING'")
-    .bind(now,row.id).run();
+   updates.push(env.DB.prepare("UPDATE predictions SET state='UNOBSERVED_GAP',settled_at=? WHERE id=? AND state='PENDING'").bind(now,row.id));
    gaps++;
   }
  }
+ if(updates.length)await env.DB.batch(updates);
  return {settled,gaps};
 }
 export function targetPreopen(origin,now) {
@@ -194,20 +194,21 @@ async function tick(env,now){
   'INSERT OR IGNORE INTO run_slots(slot,started_at) VALUES(?,?)'
  ).bind(slot,now).run();
  if(!lock.meta?.changes)return {duplicate:true,slot};
- let issued=0,settled=0,gaps=0,failures=[];
+ let issued=0,settled=0,gaps=0,freshSources=0,failures=[];
  const chosen=String(env.TRACKED_SYMBOLS||'BTC-USD,ETH-USD').split(',').map(s=>safeSymbol(s.trim())).filter(Boolean).slice(0,2);
  for(const symbol of [...new Set(chosen)]){
   try{
    const unresolved=await env.DB.prepare("SELECT MIN(expected_time) AS oldest FROM predictions WHERE symbol=? AND state='PENDING'").bind(symbol).first();
    const candles=await sourceCandles(symbol,now,unresolved?.oldest??null);
+   if(candles.length&&now-(candles.at(-1).time+GRANULARITY)<=GRANULARITY+45)freshSources++;
    const s=await settleExisting(env,symbol,candles,now);
    const i=await issueOne(env,symbol,candles,now);
    issued+=Number(i.issued);settled+=s.settled;gaps+=s.gaps;
   }catch(e){failures.push({symbol,reason:String(e?.message||e).slice(0,120)});}
  }
- await env.DB.prepare("UPDATE run_slots SET finished_at=?,issued=?,settled=?,gaps=?,failures_json=? WHERE slot=?")
-  .bind(Date.now()/1000,issued,settled,gaps,JSON.stringify(failures),slot).run();
- return {slot,issued,settled,gaps,failures};
+ await env.DB.prepare("UPDATE run_slots SET finished_at=?,issued=?,settled=?,gaps=?,tracked=?,fresh_sources=?,failures_json=? WHERE slot=?")
+  .bind(Date.now()/1000,issued,settled,gaps,[...new Set(chosen)].length,freshSources,JSON.stringify(failures),slot).run();
+ return {slot,issued,settled,gaps,freshSources,failures};
 }
 function cors(response,request,env){
  const origin=request.headers.get('Origin');

@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import InteractiveChart from './InteractiveChart';
 import BacktestErrorChart from './BacktestErrorChart';
+import ExtendedBacktest from './ExtendedBacktest';
 import IndependentVerification from './IndependentVerification';
 import MarketIndicatorPanels from './MarketIndicatorPanels';
 import TimeframeResearch from './TimeframeResearch';
@@ -251,6 +252,7 @@ export default function MarketLab(){
        <div className="notice" style={{marginTop:12}}><b>Accuracy is measured, not asserted.</b> The MAPE columns are the mean of the displayed per-origin absolute percentage errors (100 × |prediction / actual − 1|); only positive actuals are eligible. The separate skill column compares mean absolute log errors against a matched naive baseline. Positive skill means lower historical log error, not positive investment returns. Missing volume or bands are never invented.</div>
        <div className="notice" style={{marginTop:12}}>Measured window: {date(data.nextBar.firstEvaluationTime)} to {date(data.nextBar.lastEvaluationTime)} · {data.nextBar.evaluationChecks||0} completed next-bar outcomes. {data.nextBar.skippedUnobservedIntervals?data.nextBar.skippedUnobservedIntervals+' crypto publisher time gaps excluded from scoring.':'No publisher gaps were excluded in this window.'} If the source provides fewer bars than requested, no longer history is inferred.</div>
        <BacktestErrorChart history={data.nextBar.history||[]} provider={selection.provider} interval={meta.interval||interval}/>
+        <ExtendedBacktest candles={data?.candles||[]} provider={selection.provider} interval={meta.interval||interval} analysisIdentity={data?.analysisIdentity}/>
        <details style={{marginTop:18}}>
          <summary style={{cursor:'pointer',fontWeight:700}}>Observed interval coverage and historical predictions</summary>
          <div className="grid5" style={{marginTop:13,marginBottom:13}}>

@@ -147,3 +147,13 @@ test('crypto pre-open forecast targets two source intervals ahead without using 
  assert.equal(replay.history.at(-1).predicted.close,before.forecast.close,
   'Changing an as-yet-unobserved target must never alter its earlier forecast');
 });
+
+test('unqualified analogue output is reduced to an observable baseline until matured outcomes exist',()=>{
+ const rows=completedCandles(130);
+ const result=auditNextBar(rows,{provenance:'coinbase',interval:'5m',maxChecks:128});
+ assert.equal(result.available,true);
+ const first=result.history[0];
+ assert.equal(first.predicted.close,first.baseline.close);
+ assert.equal(first.predicted.open,first.baseline.open);
+ assert.ok(result.accuracy.close.samples>0);
+});

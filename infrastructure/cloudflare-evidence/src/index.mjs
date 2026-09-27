@@ -232,6 +232,7 @@ async function report(request,env){
   targetTiming:'Issued BEFORE target bar opens; one intervening unfinished bar is skipped. Two source-bar (10-minute) horizon from last completed origin.',
   lastScheduledRun:last||null,schedulerHealthy:!!last?.finished_at&&Date.now()/1000-last.finished_at<900,
   stats:computed,
+  scoreScope:'Most recent '+limit+' recorded issuances for this instrument; NOT lifetime accuracy.',
   // No after-the-fact edits: actual values and original issuance are different columns.
   history:history.map(x=>({...x,source:safeParse(x.source_json),
    predicted:safeParse(x.predicted_json),baseline:safeParse(x.baseline_json),

@@ -135,7 +135,7 @@ export function summarizeIssued(rows=[]){
  }
  return {settled:ordered.length,byField:stats};
 }
-async function settleExisting(env,symbol,candles,now){
+export async function settleExisting(env,symbol,candles,now){
  if(!candles.length)return {settled:0,gaps:0};
  const pending=(await env.DB.prepare(
   "SELECT id,expected_time,origin_time FROM predictions WHERE symbol=? AND interval='5m' AND state='PENDING' ORDER BY origin_time DESC LIMIT 300"

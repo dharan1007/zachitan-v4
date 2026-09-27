@@ -147,3 +147,20 @@
 @media(max-width:1200px){.marketMain .chartPanel{width:90%;min-width:0}.evidenceReadout{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:960px){.marketMain .chartPanel{width:100%}.marketMain .chartWrap{height:520px}}
 @media(max-width:620px){.marketMain .chartWrap{height:510px}.marketChartReadout{font-size:13px}.marketChartReadout strong{font-size:14px}.indicatorPanels{padding:11px}.indicatorPanel{padding:8px}.evidenceReadout{grid-template-columns:repeat(2,1fr)}}
+
+
+.timeframeResearchGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.timeframeResearchItem{min-width:0;border:1px solid #d5e0eb;border-radius:14px;background:#fbfdff;padding:13px;color:#15324e}
+.timeframeResearchActive{background:#f3f8ff;border-color:#81a9d2;grid-column:1/-1}
+.timeframeResearchHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.timeframeResearchHeader strong{display:block;color:#0e2c49;font-size:15px}
+.timeframeResearchHeader span{display:block;margin-top:4px;color:#3e5770;font-size:12px}
+.timeframeResearchItem>.muted{font-size:13px;line-height:1.55;margin:12px 0 4px}
+.timeframeResearchMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.timeframeResearchMetrics>div{background:#fff;border:1px solid #dce7f0;border-radius:10px;padding:11px}
+.timeframeResearchMetrics span{display:block;color:#435b72;font-size:12px}
+.timeframeResearchMetrics b{display:block;color:#0a2a47;font-size:17px;font-variant-numeric:tabular-nums;margin-top:4px}
+.timeframeResearchFinding{margin-top:11px;border-left:4px solid #2c649b;border-radius:7px;padding:11px;background:#fff}
+.timeframeResearchFinding strong{font-size:14px;color:#183b5d}
+.timeframeResearchFinding p{font-size:13px;color:#304c66;line-height:1.65;margin:7px 0 0}
+@media(max-width:850px){.timeframeResearchGrid{grid-template-columns:1fr}.timeframeResearchActive{grid-column:auto}.timeframeResearchMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

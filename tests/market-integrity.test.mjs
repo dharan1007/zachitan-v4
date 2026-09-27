@@ -40,12 +40,12 @@ test('Yahoo non-regular sessions stop forecasts and background polling', () => {
   assert.ok(open.autoRefreshMs >= 60_000);
 });
 
-test('Coinbase remains forecastable but does not require server polling when websocket streaming is available', () => {
+test('Coinbase price uses websocket while prediction refresh stays bounded to the visible page', () => {
   const policy = marketSessionPolicy({ provider: 'coinbase', meta: { marketState: '24/7 live' }, interval: '5m' });
   assert.equal(policy.forecastAllowed, true);
   assert.equal(policy.state, 'OPEN');
-  assert.equal(policy.autoRefreshMs, null);
-  assert.equal(policy.transport, 'websocket-live-price');
+  assert.equal(policy.autoRefreshMs, 300_000);
+  assert.equal(policy.transport, 'websocket-live-price-plus-bounded-http-snapshot');
 });
 
 test('reference sources are explicit publication-cadence data and never background-polled', () => {

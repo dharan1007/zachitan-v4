@@ -246,9 +246,9 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    <details><summary className="btn">Indicators ({selectedIndicators.length})</summary>
     <div className="indicatorMenuList">
      <p>Choose overlays. They use published completed candles only.</p>
-     {CHART_OVERLAYS.map(option=><label key={option.id}><input type="checkbox" checked={selectedIndicators.includes(option.id)}
+     {CHART_OVERLAYS.map(option=><label key={option.id}><input type="checkbox" disabled={!indicatorSeries[option.id]?.some(valid)} checked={selectedIndicators.includes(option.id)}
       onChange={e=>{const checked=e.currentTarget.checked;setSelectedIndicators(old=>checked?[...old.filter(x=>x!==option.id),option.id]:old.filter(x=>x!==option.id));}}/>
-      <span style={{display:'inline-block',width:13,height:3,background:option.color}}/>{option.label}</label>)}
+      <span style={{display:'inline-block',width:13,height:3,background:option.color}}/>{option.label}{!indicatorSeries[option.id]?.some(valid)?' · expand history to enable':''}</label>)}
     </div>
    </details>
   </div>

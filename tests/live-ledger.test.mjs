@@ -76,3 +76,30 @@ test('a bar missing its issuance origin in a truncated chart cannot settle that 
  const z=issueAndSettleLedger(x,snapshot([sample(300),sample(600,105)]),'2026-09-27T12:05:05Z');
  assert.equal(z[0].status,'PENDING');
 });
+
+
+test('source observations settle the original forecast even when the chart is zoomed to one bar',()=>{
+ const first=snapshot([sample(0)]),live=issueAndSettleLedger([],first,ISSUE1);
+ assert.equal(live.length,1);
+ const zoomed=snapshot([sample(300,102)]);
+ zoomed.ledgerCandles=[sample(0),sample(300,102)];
+ zoomed.asOf='2026-09-27T12:00:00Z';
+ const next=issueAndSettleLedger(live,zoomed,ISSUE2);
+ assert.equal(next[0].status,'SETTLED');
+ assert.equal(next[0].actualTime,BASE+300);
+});
+
+test('a delayed provider response cannot backdate a future forecast after its outcome candle closed',()=>{
+ const data=snapshot([sample(0)]);
+ data.asOf='2026-09-27T11:59:50Z';
+ assert.equal(issueAndSettleLedger([],data,'2026-09-27T12:00:01Z').length,0);
+});
+
+test('ledger history is not overwritten by a fresher but different source evaluation',()=>{
+ const first=issueAndSettleLedger([],snapshot([sample(0)]),ISSUE1);
+ const zoomed=snapshot([sample(300,102)]);zoomed.ledgerCandles=[sample(0),sample(300,102)];
+ zoomed.asOf='2026-09-27T12:00:00Z';
+ const after=issueAndSettleLedger(first,zoomed,ISSUE2);
+ assert.equal(after[0].predicted.close,100.5);
+ assert.equal(after[0].sourceIdentity,'market-data-sha-abc');
+});

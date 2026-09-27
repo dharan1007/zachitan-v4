@@ -38,12 +38,12 @@ export default function BacktestErrorChart({history=[],provider='',interval='5m'
   </div>
   {series.length<2?<div className="notice">At least two eligible observed outcomes are required for a measured error curve. Unavailable and zero-denominator values are not invented.</div>:
    <div className="chartHistoryWrap">
-    <svg viewBox={'0 0 '+W+' '+H} role="img" aria-label="Blue is prediction absolute percentage error; grey is previous-observation baseline error" style={{width:'100%',height:'auto',display:'block'}}>
-     {[0,.25,.5,.75,1].map(v=><g key={v}><line x1={P.left} y1={y(max*v)} x2={W-P.right} y2={y(max*v)} stroke="#e3e9ed"/><text x={P.left-8} y={y(max*v)+4} textAnchor="end" fill="#5c6977" fontSize="11">{from(max*v)}</text></g>)}
+    <svg viewBox={'0 0 '+W+' '+H} role="img" aria-label="Blue is prediction absolute percentage error; grey is previous-observation baseline error" style={{width:'max(740px,100%)',height:'auto',display:'block'}}>
+     {[0,.25,.5,.75,1].map(v=><g key={v}><line x1={P.left} y1={y(max*v)} x2={W-P.right} y2={y(max*v)} stroke="#e3e9ed"/><text x={P.left-8} y={y(max*v)+4} textAnchor="end" fill="#5c6977" fontSize="13">{from(max*v)}</text></g>)}
      <path d={path('baseline')} fill="none" stroke="#96a2ad" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
      <path d={path('model')} fill="none" stroke="#2860c9" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
      {series.map((r,i)=><g key={r.t+':'+i}><circle cx={x(r.t)} cy={y(r.model)} r="3" fill="#2860c9"><title>{stamp(r.t)} — forecast absolute error {from(r.model)}; baseline {from(r.baseline)}</title></circle></g>)}
-     {[0,Math.floor((series.length-1)/2),series.length-1].map((i,k)=><text key={k} x={x(series[i].t)} y={H-9} textAnchor={k===0?'start':k===2?'end':'middle'} fill="#5c6977" fontSize="10">{new Date(series[i].t*1000).toLocaleDateString()}</text>)}
+     {[0,Math.floor((series.length-1)/2),series.length-1].map((i,k)=><text key={k} x={x(series[i].t)} y={H-9} textAnchor={k===0?'start':k===2?'end':'middle'} fill="#5c6977" fontSize="13">{new Date(series[i].t*1000).toLocaleDateString()}</text>)}
     </svg>
     <div style={{display:'flex',flexWrap:'wrap',gap:15,fontSize:11,color:'#586571',padding:'3px 8px 8px'}}>
      <span><span aria-hidden="true" style={{display:'inline-block',width:20,height:3,background:'#2860c9',verticalAlign:'middle',marginRight:4}}/>Reconstructed model error</span>

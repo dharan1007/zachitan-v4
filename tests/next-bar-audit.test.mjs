@@ -33,6 +33,8 @@ test('separate OHLCV outputs preserve candle inequalities and measured sample co
     assert.ok(result.forecast[field] > 0, field);
     assert.ok(result.accuracy[field].samples > 0, field);
     assert.ok(Number.isFinite(result.accuracy[field].maePct), field);
+    assert.ok(Number.isFinite(result.accuracy[field].meanAbsPctError), field);
+    assert.ok(Number.isFinite(result.accuracy[field].baselineMeanAbsPctError), field);
   }
   assert.ok(result.forecast.high >= Math.max(result.forecast.open, result.forecast.close));
   assert.ok(result.forecast.low <= Math.min(result.forecast.open, result.forecast.close));

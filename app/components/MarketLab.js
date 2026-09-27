@@ -1,6 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import InteractiveChart from './InteractiveChart';
+import BacktestErrorChart from './BacktestErrorChart';
 import Score from './Score';
 import SourceStatus from './SourceStatus';
 import AssetSearch from './AssetSearch';
@@ -175,22 +176,23 @@ export default function MarketLab(){
        </div>
        <div style={{overflowX:'auto'}}>
          <table className="table">
-           <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Historical MAE</th><th>Naive MAE</th><th>Skill vs naive</th><th>Adjustment</th></tr></thead>
+           <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Historical MAPE</th><th>Naive MAPE</th><th>Log-error skill</th><th>Adjustment</th></tr></thead>
            <tbody>{[['open','Next open'],['high','Next high'],['low','Next low'],['close','Next close'],['volume','Next traded volume'],['range','Full candle range (high − low)'],['body','Candle body (|close − open|)']].map(([field,label])=>{
              const stats=data.nextBar.accuracy?.[field]||{},band=data.nextBar.empirical80?.[field],parameter=data.nextBar.parameters?.[field]||{};
              return <tr key={field}>
                <td><b>{label}</b>{field==='volume'?<div className="muted" style={{fontSize:10}}>Per completed candle, only where reported</div>:null}</td>
                <td><b>{smart(data.nextBar.forecast?.[field])}</b></td>
                <td>{Array.isArray(band)?band.map(smart).join(' – '):'Uncalibrated'}</td>
-               <td>{stats.maePct==null?'—':stats.maePct.toFixed(2)+'%'}<div className="muted" style={{fontSize:10}}>n={stats.samples||0}</div></td>
-               <td>{stats.baselineMaePct==null?'—':stats.baselineMaePct.toFixed(2)+'%'}</td>
+               <td>{stats.meanAbsPctError==null?'—':stats.meanAbsPctError.toFixed(2)+'%'}<div className="muted" style={{fontSize:10}}>n={stats.samples||0}</div></td>
+               <td>{stats.baselineMeanAbsPctError==null?'—':stats.baselineMeanAbsPctError.toFixed(2)+'%'}</td>
                <td className={stats.skill>0?'positive':stats.skill<0?'negative':''}>{stats.skill==null?'—':pct(stats.skill)}</td>
                <td><b>{parameter.weight==null?'—':pct(parameter.weight,0)} analogue</b><div className="muted" style={{fontSize:10}}>{parameter.reason||'No calibration history'}</div></td>
              </tr>;
            })}</tbody>
          </table>
        </div>
-       <div className="notice" style={{marginTop:12}}><b>Accuracy is measured, not asserted.</b> Positive skill means lower historical absolute log error than a no-change baseline on this evaluation window. Negative skill means worse. The model may fall back to that baseline; this does not guarantee future improvement. Missing volume or bands are not invented.</div>
+       <div className="notice" style={{marginTop:12}}><b>Accuracy is measured, not asserted.</b> The MAPE columns are the mean of the displayed per-origin absolute percentage errors (100 × |prediction / actual − 1|); only positive actuals are eligible. The separate skill column compares mean absolute log errors against a matched naive baseline. Positive skill means lower historical log error, not positive investment returns. Missing volume or bands are never invented.</div>
+       <BacktestErrorChart history={data.nextBar.history||[]}/>
        <details style={{marginTop:18}}>
          <summary style={{cursor:'pointer',fontWeight:700}}>Observed interval coverage and historical predictions</summary>
          <div className="grid5" style={{marginTop:13,marginBottom:13}}>

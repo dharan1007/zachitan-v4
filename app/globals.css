@@ -55,3 +55,5 @@
 @media(max-width:1180px){.researchResultGrid{grid-template-columns:1fr}.chartPanel{width:90%}}
 @media(max-width:900px){.chartPanel{width:100%}.chartWrap{height:470px}}
 @media(max-width:620px){.researchMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}.researchResultTop{flex-wrap:wrap}.chartWrap{height:410px}}
+
+.chartHistoryWrap{background:#fff;border:1px solid #dde5ec;border-radius:14px;overflow:hidden;padding:8px 10px;max-width:1100px;margin-inline:auto}

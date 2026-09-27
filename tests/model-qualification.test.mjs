@@ -127,6 +127,7 @@ test('failed untouched holdout forces abstention despite positive walk-forward v
     state: 'UNQUALIFIED',
     pointSkillVsNoChange: -0.02,
     brierSkillVs50: 0.01,
+    trainingValidation: positiveValidation,
     drift: { detected: true },
     reason: 'Recent holdout skill deteriorated.',
   };
@@ -155,7 +156,8 @@ test('publication cannot silently refit weights or calibration on later validati
   };
   const rows = series();
   const observed = forecast(rows, 12, contaminated, qualification);
-  const expected = forecast(rows, 12, frozen, { ...qualification, trainingValidation: null });
+  const expected = forecast(rows, 12, frozen, qualification);
+  assert.notDeepEqual(observed.ensemble.weights, forecast(rows, 12, contaminated, { ...qualification, trainingValidation: contaminated }).ensemble.weights);
   assert.equal(observed.decisionState, 'PUBLISHABLE');
   assert.equal(observed.center, expected.center);
   assert.equal(observed.direction.up, expected.direction.up);

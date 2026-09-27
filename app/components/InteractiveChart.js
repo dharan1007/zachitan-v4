@@ -63,7 +63,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   const w=size.w,h=size.h,pad=PADDING;
   const plotW=Math.max(100,w-pad.l-pad.r),plotH=Math.max(100,h-pad.t-pad.b);
   const capacity=Math.max(1,series.length+maxFuture);
-  const count=clamp(view.count||125,Math.min(18,capacity),Math.max(18,capacity));
+  const count=clamp(view.count||125,Math.min(18,capacity),capacity);
   const end=clamp(view.end??totalMax,0,totalMax);
   const start=Math.max(0,end-count+1);
   const visC=[];
@@ -188,7 +188,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
  const zoom=useCallback(direction=>{
   const capacity=Math.max(1,series.length+maxFuture);
   setView(v=>{
-   const minCount=Math.min(18,capacity),maxCount=Math.max(18,capacity);
+   const minCount=Math.min(18,capacity),maxCount=capacity;
    const next=clamp(Math.round(v.count*(direction>0?1.15:.85)),minCount,maxCount);
    return {...v,count:next,end:clamp(v.end??totalMax,Math.min(next-1,totalMax),totalMax)};
   });

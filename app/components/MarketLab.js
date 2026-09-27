@@ -106,6 +106,60 @@ export default function MarketLab(){
     <div className="card pad"><Score value={f?.evidenceScore} title="Evidence score" copy="Similarity evidence after concentration and temporal-dependence penalties."/><div className="divider"/><Score value={f?.calibrationScore} title="Calibration score" copy="Walk-forward error skill, probability skill and interval coverage. N/A means it was not measured."/><div className="divider"/><div className="grid2"><div className="metric"><span>P(above current)</span><b>{f?.available?pct(f?.direction?.up):'—'}</b></div><div className="metric"><span>P(below current)</span><b>{f?.available?pct(f?.direction?.down):'—'}</b></div><div className="metric"><span>Dependence-adjusted N</span><b>{num(f?.effectiveN,1)}</b></div><div className="metric"><span>Interactive validation</span><b>{v?.checks||'—'}</b><small>up to {data?.compute?.validationOriginsMax||36} origins</small></div></div></div>
    </div>
 
+
+   <section className="card pad" id="accuracy-history" aria-label="Adaptive OHLCV forecast and accuracy history">
+     <div className="sectionHead" style={{marginBottom:14}}>
+       <div><p className="eyebrow">Automatic, source-only prequential evaluation</p><h2 style={{fontSize:24}}>Next observation · Forecast and accuracy history</h2></div>
+       <span className="betaBadge">{data?.nextBar?.available?'HISTORICAL RECONSTRUCTION':'NOT AVAILABLE'}</span>
+     </div>
+     <p className="muted" style={{fontSize:12,marginBottom:15}}>Every historical forecast uses earlier completed candles only. Later observed candles score it, and earlier matured errors adjust subsequent forecasts automatically. These are reconstructed walk-forward tests, not archived predictions issued to users or a guarantee of future accuracy. No manual verification is required.</p>
+     {data?.nextBar?.available?<>
+       <div className="grid3" style={{marginBottom:14}}>
+         <div className="metric"><span>Walk-forward checks</span><b>{data.nextBar.checks}</b><small>Last {data.nextBar.evaluationChecks} in error statistics</small></div>
+         <div className="metric"><span>Next-close direction accuracy</span><b>{data.nextBar.closeDirectionAccuracy==null?'Not measured':pct(data.nextBar.closeDirectionAccuracy)}</b><small>{data.nextBar.directionChecks} scored nonzero-direction forecasts</small></div>
+         <div className="metric"><span>Latest completed candle</span><b style={{fontSize:12}}>{date(data.nextBar.latestCompletedTime)}</b><small>{data?.compute?.excludedUnfinished?'Unfinished candle excluded':'Completed source observations only'}</small></div>
+       </div>
+       <div style={{overflowX:'auto'}}>
+         <table className="table">
+           <thead><tr><th>Variable</th><th>Next observation</th><th>Empirical 80% band</th><th>Historical MAE</th><th>Naive MAE</th><th>Skill vs naive</th><th>Adjustment</th></tr></thead>
+           <tbody>{[['open','Next open'],['high','Next high'],['low','Next low'],['close','Next close'],['volume','Next traded volume']].map(([field,label])=>{
+             const stats=data.nextBar.accuracy?.[field]||{},band=data.nextBar.empirical80?.[field],parameter=data.nextBar.parameters?.[field]||{};
+             return <tr key={field}>
+               <td><b>{label}</b>{field==='volume'?<div className="muted" style={{fontSize:10}}>Per completed candle, only where reported</div>:null}</td>
+               <td><b>{smart(data.nextBar.forecast?.[field])}</b></td>
+               <td>{Array.isArray(band)?band.map(smart).join(' – '):'Uncalibrated'}</td>
+               <td>{stats.maePct==null?'—':stats.maePct.toFixed(2)+'%'}<div className="muted" style={{fontSize:10}}>n={stats.samples||0}</div></td>
+               <td>{stats.baselineMaePct==null?'—':stats.baselineMaePct.toFixed(2)+'%'}</td>
+               <td className={stats.skill>0?'positive':stats.skill<0?'negative':''}>{stats.skill==null?'—':pct(stats.skill)}</td>
+               <td><b>{parameter.weight==null?'—':pct(parameter.weight,0)} analogue</b><div className="muted" style={{fontSize:10}}>{parameter.reason||'No calibration history'}</div></td>
+             </tr>;
+           })}</tbody>
+         </table>
+       </div>
+       <div className="notice" style={{marginTop:12}}><b>Accuracy is measured, not asserted.</b> Positive skill means lower historical absolute log error than a no-change baseline on this evaluation window. Negative skill means worse. The model may fall back to that baseline; this does not guarantee future improvement. Missing volume or bands are not invented.</div>
+       <details style={{marginTop:18}}>
+         <summary style={{cursor:'pointer',fontWeight:700}}>Observed interval coverage and historical predictions</summary>
+         <div className="grid5" style={{marginTop:13,marginBottom:13}}>
+           {['open','high','low','close','volume'].map(field=>{
+             const c=data.nextBar.intervalCoverage?.[field]||{};
+             return <div className="metric" key={field}><span>{field.toUpperCase()} · nominal 80%</span><b>{c.observed==null?'Insufficient':pct(c.observed)}</b><small>{c.checks||0} matured band checks</small></div>;
+           })}
+         </div>
+         <div style={{overflowX:'auto'}}>
+           <table className="table">
+             <thead><tr><th>Historical forecast origin</th><th>Observed next</th><th>Predicted O / H / L / C / volume</th><th>Observed O / H / L / C / volume</th><th>Close absolute error</th></tr></thead>
+             <tbody>{(data.nextBar.history||[]).map((record,i)=><tr key={record.issuedAt+'-'+i}>
+               <td>{date(record.issuedAt)}</td><td>{date(record.observedAt)}</td>
+               <td>{['open','high','low','close','volume'].map(k=>smart(record.predicted?.[k])).join(' / ')}</td>
+               <td>{['open','high','low','close','volume'].map(k=>smart(record.observed?.[k])).join(' / ')}</td>
+               <td>{record.absErrorPct?.close==null?'—':record.absErrorPct.close.toFixed(2)+'%'}</td>
+             </tr>)}</tbody>
+           </table>
+         </div>
+         <p className="muted" style={{fontSize:11,marginTop:9}}>These rows are reproducibly reconstructed from source history. They are not an immutable as-issued live prediction ledger. Results vary by symbol, timeframe and market regime.</p>
+       </details>
+     </>:<div className="notice">{data?.nextBar?.reason||'No eligible completed source OHLCV history. Live accuracy has not been measured.'}</div>}
+   </section>
    {publishable&&forecastPoints.length?<div className="card pad"><div className="sectionHead" style={{marginBottom:8}}><div><p className="eyebrow">Validated forward path</p><h2 style={{fontSize:25}}>Published checkpoints</h2></div><p>{f?.timePolicy||'Indexed by future market observations.'}</p></div><div style={{overflow:'auto'}}><table className="pointTable"><thead><tr><th>Checkpoint</th><th>Point</th><th>Change</th><th>P(up)</th><th>50% interval</th><th>80% interval</th><th>90% interval</th></tr></thead><tbody>{forecastPoints.map((p,i)=><tr key={`${p.bar}:${i}`}><td>{p.time?date(p.time):p.observationLabel||`+${p.bar} observations`}</td><td><b>{smart(p.price)}</b></td><td className={p.change>=0?'positive':'negative'}>{signedPct(p.change)}</td><td>{pct(p.pUp)}</td><td>{p.ranges?.[50]?`${smart(p.ranges[50][0])}–${smart(p.ranges[50][1])}`:'—'}</td><td>{p.ranges?.[80]?`${smart(p.ranges[80][0])}–${smart(p.ranges[80][1])}`:'—'}</td><td>{p.ranges?.[90]?`${smart(p.ranges[90][0])}–${smart(p.ranges[90][1])}`:'—'}</td></tr>)}</tbody></table></div></div>:null}
 
    <details className="card pad"><summary style={{cursor:'pointer',fontWeight:700}}>Validation and model diagnostics</summary><div style={{marginTop:16}}>{v?.available?<><div className="grid5"><div className="metric"><span>Walk-forward checks</span><b>{v.checks}</b><small>minimum gap {v.originGapMin} bars</small></div><div className="metric"><span>MASE vs no-change</span><b>{metric(v.maseNoChange,3)}</b><small>&lt;1 beats unchanged-price</small></div><div className="metric"><span>Error skill</span><b className={v.skillVsNoChange>0?'positive':'negative'}>{pct(v.skillVsNoChange)}</b><small>positive is better</small></div><div className="metric"><span>Brier skill</span><b className={v.brierSkillVs50>0?'positive':'negative'}>{pct(v.brierSkillVs50)}</b><small>vs 50/50 probability</small></div><div className="metric"><span>Direction accuracy</span><b>{pct(v.directionAccuracy)}</b><small>momentum {pct(v.momentumDirectionAccuracy)}</small></div></div><div className="grid3" style={{marginTop:12}}>{[50,80,90].map(k=><div className="metric" key={k}><span>{k}% interval coverage</span><b>{pct(v.coverage?.[k])}</b><small>mean width {pct(v.intervalMeanWidthPct?.[k])}</small></div>)}</div></>:<div className="notice">{v?.reason||'Not enough clean history for non-overlapping validation.'}</div>}</div></details>

@@ -22,7 +22,8 @@ test('first actual issued forecast keeps its original target and source identity
 });
 test('next adjacent completed source bar settles earlier issuance without manual verification',()=>{
  const x=issueAndSettleLedger([],snapshot([sample(0)]),ISSUE1);
- const y=issueAndSettleLedger(x,snapshot([sample(0),sample(300,102)]),ISSUE2);
+ const second=snapshot([sample(0),sample(300,102)]);second.asOf='2026-09-27T12:00:00Z';
+ const y=issueAndSettleLedger(x,second,ISSUE2);
  assert.equal(y.length,2);assert.equal(y[0].status,'SETTLED');assert.equal(y[0].observed.close,102);
  assert.equal(y[0].actualTime,BASE+300);assert.ok(y[0].absErrorPct.close>0);
  assert.equal(y[1].status,'PENDING');
@@ -50,14 +51,17 @@ test('two instruments cannot settle from one another source history',()=>{
  const existing=issueAndSettleLedger([],snapshot([sample(0)]),ISSUE1);
  const incorrect=snapshot([sample(0),sample(300)]);
  incorrect.symbol='ETH-USD';
+ incorrect.asOf='2026-09-27T12:00:00Z';
  const result=issueAndSettleLedger(existing,incorrect,ISSUE2);
  assert.equal(result[0].status,'PENDING');
  assert.equal(result[1].symbol,'ETH-USD');
 });
 test('a corrected source cannot rewrite already settled original observed outcome',()=>{
  const x=issueAndSettleLedger([],snapshot([sample(0)]),ISSUE1);
- const y=issueAndSettleLedger(x,snapshot([sample(0),sample(300,102)]),ISSUE2);
- const z=issueAndSettleLedger(y,snapshot([sample(0),sample(300,105)]),ISSUE2);
+ const second=snapshot([sample(0),sample(300,102)]);second.asOf='2026-09-27T12:00:00Z';
+ const y=issueAndSettleLedger(x,second,ISSUE2);
+ const corrected=snapshot([sample(0),sample(300,105)]);corrected.asOf='2026-09-27T12:00:00Z';
+ const z=issueAndSettleLedger(y,corrected,ISSUE2);
  assert.equal(z[0].observed.close,102);
  assert.equal(z[0].predicted.close,100.5);
 });

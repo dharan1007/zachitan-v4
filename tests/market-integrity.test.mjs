@@ -66,7 +66,7 @@ test('reference sources are explicit publication-cadence data and never backgrou
   }
 });
 
-test('session gate withholds numeric target while retaining uncertainty evidence', () => {
+test('session gate withholds all numeric points and bands while retaining sample metadata', () => {
   const forecast = {
     available: true,
     current: 100,
@@ -80,7 +80,8 @@ test('session gate withholds numeric target while retaining uncertainty evidence
   assert.equal(gated.decisionState, 'ABSTAIN');
   assert.equal(gated.center, null);
   assert.equal(gated.points[0].price, null);
-  assert.deepEqual(gated.ranges[80], [90, 110]);
+  assert.equal(gated.ranges[80], null);
+  assert.equal(gated.points[0].ranges[80], null);
   assert.match(gated.abstainReason, /closed|session/i);
 });
 

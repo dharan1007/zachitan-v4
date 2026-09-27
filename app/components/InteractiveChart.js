@@ -11,7 +11,7 @@ function timeLabel(sec,span){
  return span<3*86400?d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):d.toLocaleDateString([],{month:'short',day:'numeric'});
 }
 
-export default function InteractiveChart({candles=[],forecast=null,livePrice=null}){
+export default function InteractiveChart({candles=[],forecast=null,livePrice=null,provider='coinbase',interval='5m'}){
  const canvasRef=useRef(null),hostRef=useRef(null),dragRef=useRef(null),totalRef=useRef(0);
  const [size,setSize]=useState({w:800,h:510});
  const [view,setView]=useState({end:null,count:125});
@@ -28,6 +28,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   valid(p.price)&&Number(p.price)>0&&Number.isFinite(Number(p.bar))&&Number(p.bar)>0
  ):[],[forecast]);
  const maxFuture=points.length?Math.max(...points.map(p=>Number(p.bar))):0;
+ const expectedSec=({'1m':60,'5m':300,'15m':900,'1h':3600,'6h':21600,'1d':86400,'1wk':604800})[interval]??null;
  const totalMax=Math.max(0,series.length-1+maxFuture);
  const currentLive=valid(livePrice)&&Number(livePrice)>0?Number(livePrice):null;
 
@@ -63,7 +64,8 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
   const w=size.w,h=size.h,pad=PADDING;
   const plotW=Math.max(100,w-pad.l-pad.r),plotH=Math.max(100,h-pad.t-pad.b);
   const capacity=Math.max(1,series.length+maxFuture);
-  const count=clamp(view.count||125,Math.min(18,capacity),Math.max(18,capacity));
+  const minimum=Math.min(18,capacity);
+  const count=clamp(view.count||125,minimum,capacity);
   const end=clamp(view.end??totalMax,0,totalMax);
   const start=Math.max(0,end-count+1);
   const visC=[];
@@ -135,10 +137,13 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    const values=indicatorSeries[overlay.id];
    if(!Array.isArray(values))continue;
    ctx.save();ctx.strokeStyle=overlay.color;ctx.lineWidth=1.9;ctx.beginPath();
-   let active=false;
+   let active=false,lastOverlayIndex=null;
    for(const {i} of g.visC){
+    if(provider==='coinbase'&&expectedSec&&lastOverlayIndex!==null&&
+       series[i].time-series[lastOverlayIndex].time>expectedSec*1.1)active=false;
     const v=values[i];
-    if(!valid(v)){active=false;continue;}
+    if(!valid(v)){active=false;lastOverlayIndex=null;continue;}
+    lastOverlayIndex=i;
     if(!active){ctx.moveTo(g.X(i),g.Y(Number(v)));active=true;}
     else ctx.lineTo(g.X(i),g.Y(Number(v)));
    }
@@ -170,7 +175,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    const y=g.Y(currentLive);ctx.save();ctx.strokeStyle='#ab6f14';ctx.lineWidth=1;
    ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(g.pad.l,y);ctx.lineTo(g.w-g.pad.r,y);ctx.stroke();ctx.restore();
    ctx.fillStyle='#fef1d4';ctx.fillRect(g.w-g.pad.r,y-10,g.pad.r,20);
-   ctx.fillStyle='#725016';ctx.textAlign='left';ctx.font='10px system-ui';
+   ctx.fillStyle='#725016';ctx.textAlign='left';ctx.font='13px system-ui';
    ctx.fillText(smart(currentLive),g.w-g.pad.r+6,y);
   }
   if(cross&&cross.x>=g.pad.l&&cross.x<=g.w-g.pad.r&&cross.y>=g.pad.t&&cross.y<=g.h-g.pad.b){
@@ -178,7 +183,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
    ctx.beginPath();ctx.moveTo(cross.x,g.pad.t);ctx.lineTo(cross.x,g.h-g.pad.b);
    ctx.moveTo(g.pad.l,cross.y);ctx.lineTo(g.w-g.pad.r,cross.y);ctx.stroke();ctx.restore();
   }
- },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators]);
+ },[geom,series,currentLive,cross,indicatorSeries,selectedIndicators,provider,expectedSec]);
 
  useEffect(()=>{
   let frame=requestAnimationFrame(draw);
@@ -188,7 +193,7 @@ export default function InteractiveChart({candles=[],forecast=null,livePrice=nul
  const zoom=useCallback(direction=>{
   const capacity=Math.max(1,series.length+maxFuture);
   setView(v=>{
-   const minCount=Math.min(18,capacity),maxCount=Math.max(18,capacity);
+   const minCount=Math.min(18,capacity),maxCount=capacity;
    const next=clamp(Math.round(v.count*(direction>0?1.15:.85)),minCount,maxCount);
    return {...v,count:next,end:clamp(v.end??totalMax,Math.min(next-1,totalMax),totalMax)};
   });

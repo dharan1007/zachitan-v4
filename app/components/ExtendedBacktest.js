@@ -34,11 +34,11 @@ export default function ExtendedBacktest({candles=[],provider='coinbase',interva
  return <details className="expandedBacktest" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}>
   <summary>Inspect more completed historical observations · independent browser calculation</summary>
   <div style={{padding:'12px 3px 3px'}}>
-   <p className="muted" style={{fontSize:13,lineHeight:1.6}}>This optional, deeper walk-forward replay runs in a browser Web Worker over genuine downloaded history. It does not call any new Vercel function and never replaces the independently issued forecast ledger. Source publishers impose historical-length limits; earlier dates cannot be manufactured.</p>
+   <p className="muted" style={{fontSize:13,lineHeight:1.6}}>This optional, deeper walk-forward replay runs in a browser Web Worker over genuine downloaded history. The all-available setting uses more local CPU and may be slower on older devices. It does not call any new Vercel function and never replaces the independently issued forecast ledger. Source publishers impose historical-length limits; earlier dates cannot be manufactured.</p>
    <div className="expandedBacktestControls">
     <label>Maximum retrospective checks
      <select className="select" value={depth} onChange={e=>setDepth(Number(e.target.value))}>
-      {[128,256,512].map(v=><option key={v} value={v}>{v} most recent eligible observations</option>)}
+      {[128,256,512,1100].map(v=><option key={v} value={v}>{v===1100?'All available (up to 1100)':'Last '+v+' eligible observations'}</option>)}
      </select>
     </label>
     <label>Measured field

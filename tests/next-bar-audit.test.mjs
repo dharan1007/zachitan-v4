@@ -101,3 +101,27 @@ test('inspection and accuracy computation have a bounded evaluation window', () 
   assert.ok(audit.evaluationChecks <= 128);
   assert.equal(audit.history.length,audit.evaluationChecks);
 });
+
+
+test('a missing 24/7 source interval cannot be scored as the next scheduled interval',()=>{
+ const rows=completedCandles(265);
+ const shifted=rows.map((c,i)=>i<230?c:{...c,time:c.time+300});
+ const audit=auditNextBar(shifted,{provenance:'coinbase',interval:'5m',maxChecks:128});
+ assert.equal(audit.available,true);
+ assert.ok(audit.skippedUnobservedIntervals>0);
+ assert.ok(audit.evaluationChecks>24);
+ assert.equal(audit.history.length,audit.evaluationChecks);
+ for(const entry of audit.history){
+  assert.equal(entry.observedAt-entry.issuedAt,300,'Do not interpolate a missing Coinbase bar');
+ }
+});
+
+test('historical visible checks include every eligible returned origin, not only a handpicked 24-bar sample',()=>{
+ const rows=completedCandles(300);
+ const audit=auditNextBar(rows,{provenance:'coinbase',interval:'5m',maxChecks:128});
+ assert.equal(audit.available,true);
+ assert.equal(audit.evaluationChecks,128);
+ assert.equal(audit.history.length,128);
+ assert.equal(audit.firstEvaluationTime,audit.history[0].issuedAt);
+ assert.equal(audit.lastEvaluationTime,audit.history.at(-1).observedAt);
+});

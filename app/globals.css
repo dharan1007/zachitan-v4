@@ -164,3 +164,12 @@
 .timeframeResearchFinding strong{font-size:14px;color:#183b5d}
 .timeframeResearchFinding p{font-size:13px;color:#304c66;line-height:1.65;margin:7px 0 0}
 @media(max-width:850px){.timeframeResearchGrid{grid-template-columns:1fr}.timeframeResearchActive{grid-column:auto}.timeframeResearchMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+.expandedBacktest{padding:14px;margin:18px 0;border:1px solid #c8d8e7;border-radius:13px;background:#fff}
+.expandedBacktest>summary{font-weight:780;color:#12385e;font-size:16px;line-height:1.5;cursor:pointer}
+.expandedBacktest>summary:focus-visible{outline:3px solid #175eac;outline-offset:4px}
+.expandedBacktestControls{display:flex;align-items:end;gap:14px;flex-wrap:wrap;margin-top:13px}
+.expandedBacktestControls label{display:grid;gap:6px;color:#253f56;font-size:13px;font-weight:730}
+.expandedBacktestControls select{min-width:180px;font-size:13px}
+.expandedBacktestControls .muted{font-size:13px}

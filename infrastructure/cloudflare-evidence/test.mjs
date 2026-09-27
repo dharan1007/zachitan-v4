@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {candidateForecast,adaptForecast,summarizeIssued,targetPreopen,schedulerIsHealthy} from './src/index.mjs';
+import {candidateForecast,adaptForecast,summarizeIssued,targetPreopen,schedulerIsHealthy,settleExisting} from './src/index.mjs';
 const fixture=(close=100,volume=1000)=>({time:1700000000,open:close*.998,close,high:close*1.01,low:close*.99,volume});
 test('source-only candidate is coherent and cannot look at future candles',()=>{
  const prior=fixture(99),last=fixture(100);
@@ -73,4 +73,37 @@ test('a cron heartbeat without fresh publisher data never claims live accuracy t
  assert.equal(schedulerIsHealthy({...row,finished_at:1},now),false);
  assert.equal(schedulerIsHealthy({...row,tracked:0,fresh_sources:0},now),false);
  assert.equal(schedulerIsHealthy(null,now),false);
+});
+
+function fakeEvidenceDb(pending){
+ const record={statements:[],query:''};
+ const DB={
+  prepare(query){return {bind(...params){return {query,params,
+   all:async()=>{record.query=query;return {results:pending};}
+  };}}},
+  async batch(statements){record.statements=statements;return statements.map(()=>({success:true,meta:{changes:1}}));}
+ };
+ return {DB,record};
+}
+test('a genuine next observed candle settles its original forecast with one atomic D1 batch',async()=>{
+ const {DB,record}=fakeEvidenceDb([{id:'forecast-1',expected_time:1600,origin_time:1000}]);
+ const result=await settleExisting({DB},'BTC-USD',[{time:1300},{time:1600,close:102},{time:1900}],2500);
+ assert.equal(result.settled,1);assert.equal(result.gaps,0);
+ assert.equal(record.statements.length,1);
+ assert.match(record.statements[0].query,/SETTLED/);
+ assert.equal(record.statements[0].params[2],'forecast-1');
+ assert.match(record.query,/LIMIT 300/);
+});
+test('missing continuous-market slot is a source gap only when real surrounding candles bracket it',async()=>{
+ const before=[{id:'missing-1',expected_time:1600,origin_time:1000}];
+ const {DB,record}=fakeEvidenceDb(before);
+ const result=await settleExisting({DB},'BTC-USD',[{time:1300},{time:1900}],2500);
+ assert.equal(result.settled,0);assert.equal(result.gaps,1);
+ assert.match(record.statements[0].query,/UNOBSERVED_GAP/);
+});
+test('a truncated publisher download must not be mislabeled as a missing market candle',async()=>{
+ const {DB,record}=fakeEvidenceDb([{id:'too-old',expected_time:1600,origin_time:1000}]);
+ const result=await settleExisting({DB},'BTC-USD',[{time:1900},{time:2200}],2800);
+ assert.equal(result.settled,0);assert.equal(result.gaps,0);
+ assert.equal(record.statements.length,0);
 });

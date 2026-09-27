@@ -174,17 +174,21 @@ async function issueOne(env,symbol,candles,now){
  const raw=candidateForecast(current,previous),base=naive(current);
  if(!raw)return {issued:false,reason:'Invalid publisher OHLC'};
  const rows=(await env.DB.prepare(
-  "SELECT raw_json,baseline_json,observed_json FROM predictions WHERE symbol=? AND interval='5m' AND state='SETTLED' ORDER BY origin_time DESC LIMIT 40"
+  "SELECT id,raw_json,baseline_json,observed_json FROM predictions WHERE symbol=? AND interval='5m' AND state='SETTLED' ORDER BY origin_time DESC LIMIT 40"
  ).bind(symbol).all()).results||[];
- const {predicted,parameters}=adaptForecast(raw,base,rows.slice().reverse());
+ const matureEvidence=rows.slice().reverse();
+ const {predicted,parameters}=adaptForecast(raw,base,matureEvidence);
+ const calibrationRecord={fieldWeights:parameters,
+  settledEvidenceIds:matureEvidence.map(x=>x.id).filter(Boolean),
+  sourceOriginTimes:[previous.time,current.time]};
  const {canIssue,expectedTime}=targetPreopen(current,now);
  if(!canIssue)return {issued:false,reason:'Target candle has opened or source origin is not final; refusing retrospective issuance'};
  const id=PROVIDER+':'+symbol+':5m:'+current.time+':'+MODEL_VERSION;
  const row=(await env.DB.prepare(
   "INSERT OR IGNORE INTO predictions(id,provider,symbol,interval,model_version,origin_time,expected_time,issued_at,source_json,raw_json,baseline_json,predicted_json,parameters_json,state) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'PENDING')"
  ).bind(id,PROVIDER,symbol,'5m',MODEL_VERSION,current.time,expectedTime,
-  now,JSON.stringify(current),JSON.stringify(raw),JSON.stringify(base),
-  JSON.stringify(predicted),JSON.stringify(parameters)).run());
+  now,JSON.stringify({previous,current}),JSON.stringify(raw),JSON.stringify(base),
+  JSON.stringify(predicted),JSON.stringify(calibrationRecord)).run());
  return {issued:!!row.meta?.changes,originTime:current.time};
 }
 async function tick(env,now){

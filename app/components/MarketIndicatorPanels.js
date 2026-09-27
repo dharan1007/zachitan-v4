@@ -24,8 +24,9 @@ function graphPath(values,times,y,minTime,maxTime,expected,provider){
  });
  return d.trim();
 }
-export default function MarketIndicatorPanels({candles=[],interval='5m',provider='coinbase'}){
+export default function MarketIndicatorPanels({candles=[],interval='5m',provider='coinbase',referenceValueOnly=false}){
  const [enabled,setEnabled]=useState([]);
+ const availableOptions=referenceValueOnly?OPTIONS.filter(item=>item.id==='rsi14'||item.id==='macd'):OPTIONS;
  const [showHelp,setShowHelp]=useState(false);
  const computed=useMemo(()=>computeChartIndicators(candles),[candles]);
  const expected=({'1m':60,'5m':300,'15m':900,'1h':3600,'6h':21600,'1d':86400,'1wk':604800})[interval];
@@ -40,14 +41,14 @@ export default function MarketIndicatorPanels({candles=[],interval='5m',provider
    <button className="btn" type="button" onClick={()=>setShowHelp(x=>!x)} aria-expanded={showHelp}>{showHelp?'Hide explanations':'Explain indicators'}</button>
   </div>
   <div className="indicatorPanelOptions" role="group" aria-label="Toggle indicators">
-   {OPTIONS.map(p=><label key={p.id} className={enabled.includes(p.id)?'indicatorChoice on':'indicatorChoice'}>
+   {availableOptions.map(p=><label key={p.id} className={enabled.includes(p.id)?'indicatorChoice on':'indicatorChoice'}>
     <input type="checkbox" checked={enabled.includes(p.id)}
      onChange={e=>{const checked=e.target.checked;setEnabled(v=>checked?[...v,p.id]:v.filter(x=>x!==p.id))}}/>
     {p.label}</label>)}
   </div>
-  {showHelp?<div className="notice">Simple averages, exponential averages, Bollinger bands, rolling VWAP and highest/lowest channels are available through the chart's Indicators menu. RSI, MACD, ATR and traded volume use separate scales below; overlaying them on the price axis would be mathematically misleading. No indicator here is a validated trade recommendation.</div>:null}
-  {enabled.length===0?<p className="indicatorEmpty">Choose an indicator to add a study below the price chart. Unavailable volume or insufficient price history is shown as unavailable.</p>:null}
-  {OPTIONS.filter(x=>enabled.includes(x.id)).map(option=>{
+  {showHelp?<div className="notice">Simple averages, exponential averages, Bollinger bands, rolling VWAP and highest/lowest channels are available through the chart's Indicators menu. Published reference-only NAV and ECB series have no true high, low or trade volume: ATR and volume studies are not offered for them. RSI, MACD, ATR and traded volume use separate scales below; overlaying them on the price axis would be mathematically misleading. No indicator here is a validated trade recommendation.</div>:null}
+  {enabled.length===0?<p className="indicatorEmpty">Choose an indicator to add a study below the chart. Reference-only values support price-series momentum studies but not true-range or traded-volume studies. Unavailable publisher data is never invented.</p>:null}
+  {availableOptions.filter(x=>enabled.includes(x.id)).map(option=>{
    const {last,offset,times}=windows;
    const values=option.id==='volume'?last.map(c=>c.volume==null?null:Number(c.volume)):
     (computed[option.id]||[]).slice(offset);

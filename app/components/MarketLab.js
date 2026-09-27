@@ -2,6 +2,7 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import InteractiveChart from './InteractiveChart';
 import BacktestErrorChart from './BacktestErrorChart';
+import { classifyGap } from '@/lib/candle-calendar.mjs';
 import Score from './Score';
 import SourceStatus from './SourceStatus';
 import AssetSearch from './AssetSearch';
@@ -99,6 +100,14 @@ export default function MarketLab(){
  const canOptions=['stock','etf','index'].includes(selection.assetClass)||['stock','etf','index'].includes(String(meta.assetClass||'').toLowerCase());
  const optionsNear=useMemo(()=>{if(!options?.calls?.length&&!options?.puts?.length)return[];const spot=options.metrics?.spot||+quote.price||0;return[...(options.calls||[]).map(x=>({...x,type:'Call'})),...(options.puts||[]).map(x=>({...x,type:'Put'}))].sort((a,b)=>Math.abs(a.strike-spot)-Math.abs(b.strike-spot)).slice(0,16)},[options,quote.price]);
  const candleRows=data?.candles||[];
+ const forecastByObservation=useMemo(()=>{
+  const values=new Map((data?.nextBar?.history||[]).map(r=>[Number(r.observedAt),{...r,sourceLabel:'Historical replay'}]));
+  for(const row of localLedger){
+   if(row.status==='SETTLED'&&row.provider===selection.provider&&row.symbol===selection.symbol&&row.interval===interval)
+    values.set(Number(row.actualTime),{predicted:row.predicted,observed:row.observed,absErrorPct:row.absErrorPct,sourceLabel:'Issued live'});
+  }
+  return values;
+ },[data?.nextBar?.history,localLedger,selection.provider,selection.symbol,interval]);
  const displayedHistory=useMemo(()=>candleRows.slice(-tableLimit).slice().reverse(),[candleRows,tableLimit]);
  const integrity=data?.quality?.integrity||{};
  const integrityIssues=(integrity.invalidRowsRemoved||0)+(integrity.duplicatesRemoved||0)+(integrity.outOfOrderPairs||0);
@@ -131,15 +140,14 @@ export default function MarketLab(){
       <label>Rows <select className="select" value={tableLimit} onChange={e=>setTableLimit(Number(e.target.value))}>{[25,50,100,250,1000].map(n=><option key={n} value={n}>{n}</option>)}</select></label>
      </div>
      <div className="candleHistoryScroll"><table className="table candleTable">
-      <thead><tr><th>Published bar</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Change vs preceding close</th><th>High − low</th><th>Time since preceding bar</th></tr></thead>
+      <thead><tr><th>Published bar</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Change vs preceding close</th><th>High − low</th><th>Forecast open</th><th>Forecast high</th><th>Forecast low</th><th>Forecast close</th><th>Actual − forecast close</th><th>Evidence type</th><th>Time since preceding bar</th></tr></thead>
       <tbody>{displayedHistory.map((bar,i)=>{
        const index=candleRows.length-1-i,previous=candleRows[index-1];
        const diff=previous?.close>0?bar.close/previous.close-1:null;
-       const gap=previous?.time?bar.time-previous.time:null;
-       const expected=INTERVAL_SEC[meta.interval||interval];
-       const gapLabel=gap==null?'—':expected&&gap>expected*1.1
-        ?selection.provider==='coinbase'?'Publication gap; verify source': 'Session closure or publication gap'
-        :expected&&gap===expected?'One selected interval':Math.round(gap/60)+' min';
+       const gapLabel=classifyGap(previous,bar,{provider:selection.provider,interval:meta.interval||interval,timezone:meta.timezone||'UTC'}).label;
+       const matched=forecastByObservation.get(Number(bar.time));
+       const estimated=matched?.predicted;
+       const signedDelta=estimated?.close>0&&bar.close>0?bar.close-estimated.close:null;
        return <tr key={bar.time}>
         <td><b>{date(bar.time)}</b></td>
         <td>{meta.referenceValueOnly?'Reference only':smart(bar.open)}</td>
@@ -149,11 +157,17 @@ export default function MarketLab(){
         <td>{meta.referenceValueOnly?'Not published':smart(bar.volume)}</td>
         <td className={diff>0?'positive':diff<0?'negative':''}>{diff==null?'—':signedPct(diff)}</td>
         <td>{meta.referenceValueOnly?'Not published':bar.high!=null&&bar.low!=null?smart(bar.high-bar.low):'—'}</td>
+        <td>{estimated?.open!=null?smart(estimated.open):'—'}</td>
+        <td>{estimated?.high!=null?smart(estimated.high):'—'}</td>
+        <td>{estimated?.low!=null?smart(estimated.low):'—'}</td>
+        <td>{estimated?.close!=null?smart(estimated.close):'—'}</td>
+        <td className={signedDelta>0?'positive':signedDelta<0?'negative':''}>{signedDelta==null?'—':smart(signedDelta)}{matched?.absErrorPct?.close!=null?<small style={{display:'block'}}>Abs. error {matched.absErrorPct.close.toFixed(2)}%</small>:null}</td>
+        <td>{matched?.sourceLabel||'No issued forecast'}</td>
         <td>{gapLabel}</td>
        </tr>;
       })}</tbody>
      </table></div>
-     <p className="candleHistoryFoot">{candleRows.length?'Showing '+displayedHistory.length+' of '+candleRows.length+' displayed source candles. First: '+date(candleRows[0].time)+'; latest: '+date(candleRows.at(-1).time)+'.':'Waiting for published candles.'} Model analysis uses its separate available evidence window; choosing a display range does not create missing historic data.</p>
+     <p className="candleHistoryFoot">{candleRows.length?'Showing '+displayedHistory.length+' of '+candleRows.length+' displayed source candles. First: '+date(candleRows[0].time)+'; latest: '+date(candleRows.at(-1).time)+'.':'Waiting for published candles.'} Predicted fields are drawn only from recorded live forecasts or identified historical replays; no missing prediction or candle is manufactured.</p>
     </section>
    </div>
 

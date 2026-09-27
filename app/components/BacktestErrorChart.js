@@ -7,7 +7,7 @@ function absolutePercent(estimate,actual){
  const a=number(actual),p=number(estimate);
  return a>0&&p!==null&&p>=0?100*Math.abs(p/a-1):null;
 }
-export default function BacktestErrorChart({history=[]}){
+export default function BacktestErrorChart({history=[],provider='',interval='5m'}){
  const [field,setField]=useState('close');
  const series=useMemo(()=>history.map(row=>({
   t:row.observedAt,
@@ -17,9 +17,14 @@ export default function BacktestErrorChart({history=[]}){
  const W=810,H=226,P={left:58,right:18,top:20,bottom:34};
  const chartW=W-P.left-P.right,chartH=H-P.top-P.bottom;
  const max=series.length?Math.max(.01,...series.map(r=>Math.max(r.model,r.baseline)))*1.1:1;
- const x=i=>P.left+chartW*i/Math.max(1,series.length-1);
+ const first=series[0]?.t||0,last=series.at(-1)?.t||first+1;
+ const x=t=>P.left+chartW*(t-first)/Math.max(1,last-first);
+ const step=({'1m':60,'5m':300,'15m':900,'1h':3600,'6h':21600,'1d':86400})[interval]||null;
  const y=v=>P.top+chartH*(1-v/max);
- const path=key=>series.map((r,i)=>(i===0?'M':'L')+x(i).toFixed(1)+' '+y(r[key]).toFixed(1)).join(' ');
+ const path=key=>series.map((r,i)=>{
+  const missing=provider==='coinbase'&&step&&i>0&&(r.t-series[i-1].t)>step*1.1;
+  return (i===0||missing?'M':'L')+x(r.t).toFixed(1)+' '+y(r[key]).toFixed(1);
+ }).join(' ');
  const from=v=>Number.isFinite(v)?v.toFixed(v<.1?3:2)+'%':'—';
  const stamp=v=>new Date(Number(v)*1000).toLocaleString();
  return <div aria-label={'Actual consecutive reconstructed historical '+field+' prediction errors, compared with the naive baseline'} style={{margin:'17px 0 14px'}}>
@@ -37,15 +42,15 @@ export default function BacktestErrorChart({history=[]}){
      {[0,.25,.5,.75,1].map(v=><g key={v}><line x1={P.left} y1={y(max*v)} x2={W-P.right} y2={y(max*v)} stroke="#e3e9ed"/><text x={P.left-8} y={y(max*v)+4} textAnchor="end" fill="#5c6977" fontSize="11">{from(max*v)}</text></g>)}
      <path d={path('baseline')} fill="none" stroke="#96a2ad" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
      <path d={path('model')} fill="none" stroke="#2860c9" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
-     {series.map((r,i)=><g key={r.t+':'+i}><circle cx={x(i)} cy={y(r.model)} r="3" fill="#2860c9"><title>{stamp(r.t)} — forecast absolute error {from(r.model)}; baseline {from(r.baseline)}</title></circle></g>)}
-     {[0,Math.floor((series.length-1)/2),series.length-1].map((i,k)=><text key={k} x={x(i)} y={H-9} textAnchor={k===0?'start':k===2?'end':'middle'} fill="#5c6977" fontSize="10">{new Date(series[i].t*1000).toLocaleDateString()}</text>)}
+     {series.map((r,i)=><g key={r.t+':'+i}><circle cx={x(r.t)} cy={y(r.model)} r="3" fill="#2860c9"><title>{stamp(r.t)} — forecast absolute error {from(r.model)}; baseline {from(r.baseline)}</title></circle></g>)}
+     {[0,Math.floor((series.length-1)/2),series.length-1].map((i,k)=><text key={k} x={x(series[i].t)} y={H-9} textAnchor={k===0?'start':k===2?'end':'middle'} fill="#5c6977" fontSize="10">{new Date(series[i].t*1000).toLocaleDateString()}</text>)}
     </svg>
     <div style={{display:'flex',flexWrap:'wrap',gap:15,fontSize:11,color:'#586571',padding:'3px 8px 8px'}}>
      <span><span aria-hidden="true" style={{display:'inline-block',width:20,height:3,background:'#2860c9',verticalAlign:'middle',marginRight:4}}/>Reconstructed model error</span>
      <span><span aria-hidden="true" style={{display:'inline-block',width:20,height:3,background:'#96a2ad',verticalAlign:'middle',marginRight:4}}/>Naive baseline error</span>
-     <span>{series.length} eligible consecutive recorded origins within the available source history</span>
+     <span>{series.length} eligible published outcomes; unobserved time slots remain gaps</span>
     </div>
    </div>}
-  <p className="muted" style={{fontSize:11,lineHeight:1.5,marginTop:5}}>The chart plots absolute percentage error at each already completed observation, not projected future profit. It never plots an unobserved outcome. Gaps in the publisher&apos;s actual trading calendar are not filled with invented prices.</p>
+  <p className="muted" style={{fontSize:11,lineHeight:1.5,marginTop:5}}>The chart plots absolute percentage error at each already completed observation, not projected future profit. It never plots an unobserved outcome. Horizontal positions use actual publisher timestamps. Missing continuous-market time slots break the line; exchange closures remain actual elapsed calendar time and are not filled with invented candles.</p>
  </div>;
 }
